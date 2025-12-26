@@ -33,10 +33,10 @@ import (
 )
 
 var (
-	deleteFlag            bool
-	forceDeleteFlag       bool
-	initShell             string
-	ignoreSwitchDirectory bool
+	deleteFlag          bool
+	forceDeleteFlag     bool
+	initShell           string
+	noSwitchDirectory   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -102,13 +102,13 @@ func init() {
 	rootCmd.Flags().BoolVarP(&deleteFlag, "delete", "d", false, "Delete worktree and branch (safe delete, only if merged)")
 	rootCmd.Flags().BoolVarP(&forceDeleteFlag, "force-delete", "D", false, "Force delete worktree and branch")
 	rootCmd.Flags().StringVar(&initShell, "init", "", "Output shell initialization script (bash, zsh, fish, powershell)")
-	rootCmd.Flags().BoolVar(&ignoreSwitchDirectory, "ignore-switch-directory", false, "Do not add git() wrapper for automatic directory switching (use with --init)")
+	rootCmd.Flags().BoolVar(&noSwitchDirectory, "no-switch-directory", false, "Do not add git() wrapper for automatic directory switching (use with --init)")
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
 	// Handle init flag
 	if initShell != "" {
-		return runInit(initShell, ignoreSwitchDirectory)
+		return runInit(initShell, noSwitchDirectory)
 	}
 
 	// No arguments: list worktrees
