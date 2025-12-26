@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.2](https://github.com/k1LoW/git-wt/compare/v0.2.1...v0.2.2) - 2025-12-26
+### Fix bug 🐛
+- fix: support multiple arguments for `git wt` wrappers by @k1LoW in https://github.com/k1LoW/git-wt/pull/8
+
 ## [v0.2.1](https://github.com/k1LoW/git-wt/compare/v0.2.0...v0.2.1) - 2025-12-26
 ### Breaking Changes 🛠
 - fix: rename `ignore-switch-directory` flag to `no-switch-directory` by @k1LoW in https://github.com/k1LoW/git-wt/pull/7
