@@ -18,9 +18,11 @@ install:
 
 lint:
 	golangci-lint run ./...
+	go vet -vettool=`which gostyle` -gostyle.config=$(PWD)/.gostyle.yml ./...
 
 depsdev:
 	go install github.com/Songmu/gocredits/cmd/gocredits@latest
+	go install github.com/k1LoW/gostyle@latest
 
 prerelease_for_tagpr: depsdev
 	go mod download
