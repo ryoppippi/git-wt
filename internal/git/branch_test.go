@@ -27,7 +27,7 @@ func TestBranchExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := BranchExists(tt.branch)
+			got, err := BranchExists(t.Context(), tt.branch)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -59,7 +59,7 @@ func TestLocalBranchExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LocalBranchExists(tt.branch)
+			got, err := LocalBranchExists(t.Context(), tt.branch)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -80,7 +80,7 @@ func TestListBranches(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	branches, err := ListBranches()
+	branches, err := ListBranches(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,12 +112,12 @@ func TestCreateBranch(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	err := CreateBranch("new-branch")
+	err := CreateBranch(t.Context(), "new-branch")
 	if err != nil {
 		t.Fatalf("CreateBranch failed: %v", err)
 	}
 
-	exists, err := LocalBranchExists("new-branch")
+	exists, err := LocalBranchExists(t.Context(), "new-branch")
 	if err != nil {
 		t.Fatalf("LocalBranchExists failed: %v", err)
 	}
@@ -165,12 +165,12 @@ func TestDeleteBranch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
 
-			err := DeleteBranch(tt.branch, tt.force)
+			err := DeleteBranch(t.Context(), tt.branch, tt.force)
 			if err != nil {
 				t.Fatalf("DeleteBranch failed: %v", err)
 			}
 
-			exists, err := LocalBranchExists(tt.branch)
+			exists, err := LocalBranchExists(t.Context(), tt.branch)
 			if err != nil {
 				t.Fatalf("LocalBranchExists failed: %v", err)
 			}
@@ -214,7 +214,7 @@ func TestIsBranchMerged(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := IsBranchMerged(tt.branch)
+			got, err := IsBranchMerged(t.Context(), tt.branch)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -234,7 +234,7 @@ func TestGetDefaultBranch(t *testing.T) {
 	defer restore()
 
 	// Without remote, should fallback to checking main/master
-	branch, err := GetDefaultBranch()
+	branch, err := GetDefaultBranch(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

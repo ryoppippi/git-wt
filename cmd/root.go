@@ -22,6 +22,7 @@ THE SOFTWARE.
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -108,6 +109,8 @@ func init() {
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	// Handle init flag
 	if initShell != "" {
 		return runInit(initShell, noSwitchDirectory)
@@ -115,33 +118,35 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	// No arguments: list worktrees
 	if len(args) == 0 {
-		return listWorktrees()
+		return listWorktrees(ctx)
 	}
 
 	branch := args[0]
 
 	// Handle delete flags
 	if forceDeleteFlag {
-		return deleteWorktree(branch, true)
+		return deleteWorktree(ctx, branch, true)
 	}
 	if deleteFlag {
-		return deleteWorktree(branch, false)
+		return deleteWorktree(ctx, branch, false)
 	}
 
 	// Default: create or switch to worktree
-	return handleWorktree(branch)
+	return handleWorktree(ctx, branch)
 }
 
 func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+
 	// Collect unique branch names and worktree directory names
 	seen := make(map[string]struct{})
 	var completions []string
 
 	// Get worktree base directory for relative path calculation
-	baseDir, _ := git.GetWorktreeBaseDir()
+	baseDir, _ := git.GetWorktreeBaseDir(ctx)
 
 	// Add branches and directory names from existing worktrees
-	worktrees, err := git.ListWorktrees()
+	worktrees, err := git.ListWorktrees(ctx)
 	if err == nil {
 		for _, wt := range worktrees {
 			// Add branch name
@@ -166,7 +171,7 @@ func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]s
 	}
 
 	// Add local branches
-	branches, err := git.ListBranches()
+	branches, err := git.ListBranches(ctx)
 	if err == nil {
 		for _, branch := range branches {
 			if _, exists := seen[branch]; !exists {
@@ -179,13 +184,13 @@ func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]s
 	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
-func listWorktrees() error {
-	worktrees, err := git.ListWorktrees()
+func listWorktrees(ctx context.Context) error {
+	worktrees, err := git.ListWorktrees(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	currentPath, err := git.GetCurrentWorktree()
+	currentPath, err := git.GetCurrentWorktree(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current worktree: %w", err)
 	}
@@ -232,9 +237,9 @@ func listWorktrees() error {
 	return nil
 }
 
-func deleteWorktree(branch string, force bool) error {
+func deleteWorktree(ctx context.Context, branch string, force bool) error {
 	// Find worktree by branch or directory name
-	wt, err := git.FindWorktreeByBranchOrDir(branch)
+	wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
 	if err != nil {
 		return fmt.Errorf("failed to find worktree: %w", err)
 	}
@@ -244,18 +249,18 @@ func deleteWorktree(branch string, force bool) error {
 	}
 
 	// Remove worktree
-	if err := git.RemoveWorktree(wt.Path, force); err != nil {
+	if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 
 	// Delete branch (only if it exists as a local branch)
 	// Let git branch -d/-D handle the merge check
-	exists, err := git.LocalBranchExists(branch)
+	exists, err := git.LocalBranchExists(ctx, branch)
 	if err != nil {
 		return fmt.Errorf("failed to check branch existence: %w", err)
 	}
 	if exists {
-		if err := git.DeleteBranch(branch, force); err != nil {
+		if err := git.DeleteBranch(ctx, branch, force); err != nil {
 			return fmt.Errorf("failed to delete branch (use -D to force): %w", err)
 		}
 		fmt.Printf("Deleted worktree and branch '%s'\n", branch)
@@ -265,9 +270,9 @@ func deleteWorktree(branch string, force bool) error {
 	return nil
 }
 
-func handleWorktree(branch string) error {
+func handleWorktree(ctx context.Context, branch string) error {
 	// Check if worktree already exists for this branch or directory name
-	wt, err := git.FindWorktreeByBranchOrDir(branch)
+	wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
 	if err != nil {
 		return fmt.Errorf("failed to find worktree: %w", err)
 	}
@@ -279,31 +284,31 @@ func handleWorktree(branch string) error {
 	}
 
 	// Get worktree path
-	wtPath, err := git.GetWorktreePath(branch)
+	wtPath, err := git.GetWorktreePath(ctx, branch)
 	if err != nil {
 		return fmt.Errorf("failed to get worktree path: %w", err)
 	}
 
 	// Get copy options
-	copyOpts, err := git.GetCopyOptions()
+	copyOpts, err := git.GetCopyOptions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get copy options: %w", err)
 	}
 
 	// Check if branch exists
-	exists, err := git.BranchExists(branch)
+	exists, err := git.BranchExists(ctx, branch)
 	if err != nil {
 		return fmt.Errorf("failed to check branch: %w", err)
 	}
 
 	if exists {
 		// Branch exists, create worktree with existing branch
-		if err := git.AddWorktree(wtPath, branch, copyOpts); err != nil {
+		if err := git.AddWorktree(ctx, wtPath, branch, copyOpts); err != nil {
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
 	} else {
 		// Branch doesn't exist, create new branch and worktree
-		if err := git.AddWorktreeWithNewBranch(wtPath, branch, copyOpts); err != nil {
+		if err := git.AddWorktreeWithNewBranch(ctx, wtPath, branch, copyOpts); err != nil {
 			return fmt.Errorf("failed to create worktree with new branch: %w", err)
 		}
 	}

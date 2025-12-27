@@ -30,7 +30,7 @@ func TestGetConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetConfig(tt.key)
+			got, err := GetConfig(t.Context(), tt.key)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("GetConfig(%q) error = %v, wantErr %v", tt.key, err, tt.wantErr)
 			}
@@ -53,7 +53,7 @@ func TestGetRepoRoot(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	root, err := GetRepoRoot()
+	root, err := GetRepoRoot(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestGetRepoRoot(t *testing.T) {
 		t.Fatalf("failed to chdir to subdir: %v", err)
 	}
 
-	root, err = GetRepoRoot()
+	root, err = GetRepoRoot(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error from subdir: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestGetRepoName(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	name, err := GetRepoName()
+	name, err := GetRepoName(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestGetBaseDir(t *testing.T) {
 	// Test with custom value (to avoid being affected by global config)
 	repo.Git("config", "wt.basedir", "../custom-worktrees")
 
-	got, err := GetBaseDir()
+	got, err := GetBaseDir(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestGetBaseDir(t *testing.T) {
 	// Note: This may still be affected by global config, so we set an explicit value instead
 	repo.Git("config", "wt.basedir", "../{gitroot}-wt")
 
-	got, err = GetBaseDir()
+	got, err = GetBaseDir(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestExpandPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ExpandPath(tt.path)
+			got, err := ExpandPath(t.Context(), tt.path)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -196,7 +196,7 @@ func TestGetWorktreePath(t *testing.T) {
 	repo.Git("config", "wt.basedir", "../{gitroot}-wt")
 
 	// Test with default pattern basedir
-	path, err := GetWorktreePath("feature-branch")
+	path, err := GetWorktreePath(t.Context(), "feature-branch")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestGetWorktreePath(t *testing.T) {
 	// Test with custom basedir
 	repo.Git("config", "wt.basedir", "../{gitroot}-worktrees")
 
-	path, err = GetWorktreePath("feature-branch")
+	path, err = GetWorktreePath(t.Context(), "feature-branch")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

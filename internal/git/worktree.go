@@ -2,6 +2,7 @@ package git
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,8 @@ type Worktree struct {
 }
 
 // ListWorktrees returns a list of all worktrees.
-func ListWorktrees() ([]Worktree, error) {
-	cmd, err := gitCommand("worktree", "list", "--porcelain")
+func ListWorktrees(ctx context.Context) ([]Worktree, error) {
+	cmd, err := gitCommand(ctx, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +73,8 @@ func ListWorktrees() ([]Worktree, error) {
 }
 
 // GetCurrentWorktree returns the path of the current worktree.
-func GetCurrentWorktree() (string, error) {
-	cmd, err := gitCommand("rev-parse", "--show-toplevel")
+func GetCurrentWorktree(ctx context.Context) (string, error) {
+	cmd, err := gitCommand(ctx, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", err
 	}
@@ -85,8 +86,8 @@ func GetCurrentWorktree() (string, error) {
 }
 
 // FindWorktreeByBranch finds a worktree by branch name.
-func FindWorktreeByBranch(branch string) (*Worktree, error) {
-	worktrees, err := ListWorktrees()
+func FindWorktreeByBranch(ctx context.Context, branch string) (*Worktree, error) {
+	worktrees, err := ListWorktrees(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +102,8 @@ func FindWorktreeByBranch(branch string) (*Worktree, error) {
 
 // FindWorktreeByBranchOrDir finds a worktree by branch name or directory name.
 // It first tries to match by branch name, then by directory name (relative path from base dir).
-func FindWorktreeByBranchOrDir(query string) (*Worktree, error) {
-	worktrees, err := ListWorktrees()
+func FindWorktreeByBranchOrDir(ctx context.Context, query string) (*Worktree, error) {
+	worktrees, err := ListWorktrees(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func FindWorktreeByBranchOrDir(query string) (*Worktree, error) {
 	}
 
 	// Get worktree base directory for relative path comparison
-	baseDir, err := GetWorktreeBaseDir()
+	baseDir, err := GetWorktreeBaseDir(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +140,9 @@ func FindWorktreeByBranchOrDir(query string) (*Worktree, error) {
 }
 
 // AddWorktree creates a new worktree for the given branch.
-func AddWorktree(path, branch string, copyOpts CopyOptions) error {
+func AddWorktree(ctx context.Context, path, branch string, copyOpts CopyOptions) error {
 	// Get source root before creating worktree
-	srcRoot, err := GetRepoRoot()
+	srcRoot, err := GetRepoRoot(ctx)
 	if err != nil {
 		return err
 	}
@@ -152,7 +153,7 @@ func AddWorktree(path, branch string, copyOpts CopyOptions) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	cmd, err := gitCommand("worktree", "add", path, branch)
+	cmd, err := gitCommand(ctx, "worktree", "add", path, branch)
 	if err != nil {
 		return err
 	}
@@ -164,7 +165,7 @@ func AddWorktree(path, branch string, copyOpts CopyOptions) error {
 	}
 
 	// Copy files to new worktree
-	if err := CopyFilesToWorktree(srcRoot, path, copyOpts); err != nil {
+	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts); err != nil {
 		return fmt.Errorf("failed to copy files: %w", err)
 	}
 
@@ -172,9 +173,9 @@ func AddWorktree(path, branch string, copyOpts CopyOptions) error {
 }
 
 // AddWorktreeWithNewBranch creates a new worktree with a new branch.
-func AddWorktreeWithNewBranch(path, branch string, copyOpts CopyOptions) error {
+func AddWorktreeWithNewBranch(ctx context.Context, path, branch string, copyOpts CopyOptions) error {
 	// Get source root before creating worktree
-	srcRoot, err := GetRepoRoot()
+	srcRoot, err := GetRepoRoot(ctx)
 	if err != nil {
 		return err
 	}
@@ -185,7 +186,7 @@ func AddWorktreeWithNewBranch(path, branch string, copyOpts CopyOptions) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	cmd, err := gitCommand("worktree", "add", "-b", branch, path)
+	cmd, err := gitCommand(ctx, "worktree", "add", "-b", branch, path)
 	if err != nil {
 		return err
 	}
@@ -197,7 +198,7 @@ func AddWorktreeWithNewBranch(path, branch string, copyOpts CopyOptions) error {
 	}
 
 	// Copy files to new worktree
-	if err := CopyFilesToWorktree(srcRoot, path, copyOpts); err != nil {
+	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts); err != nil {
 		return fmt.Errorf("failed to copy files: %w", err)
 	}
 
@@ -205,14 +206,14 @@ func AddWorktreeWithNewBranch(path, branch string, copyOpts CopyOptions) error {
 }
 
 // RemoveWorktree removes a worktree.
-func RemoveWorktree(path string, force bool) error {
+func RemoveWorktree(ctx context.Context, path string, force bool) error {
 	args := []string{"worktree", "remove"}
 	if force {
 		args = append(args, "--force")
 	}
 	args = append(args, path)
 
-	cmd, err := gitCommand(args...)
+	cmd, err := gitCommand(ctx, args...)
 	if err != nil {
 		return err
 	}

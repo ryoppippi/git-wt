@@ -17,7 +17,7 @@ func TestListWorktrees(t *testing.T) {
 	defer restore()
 
 	// Initially, only the main worktree should exist
-	worktrees, err := ListWorktrees()
+	worktrees, err := ListWorktrees(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestListWorktrees_Multiple(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	worktrees, err := ListWorktrees()
+	worktrees, err := ListWorktrees(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestGetCurrentWorktree(t *testing.T) {
 	restore := repo.Chdir()
 	defer restore()
 
-	path, err := GetCurrentWorktree()
+	path, err := GetCurrentWorktree(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestFindWorktreeByBranch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wt, err := FindWorktreeByBranch(tt.branch)
+			wt, err := FindWorktreeByBranch(t.Context(), tt.branch)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -146,7 +146,7 @@ func TestAddWorktree(t *testing.T) {
 	defer restore()
 
 	wtPath := filepath.Join(repo.ParentDir(), "worktree-existing")
-	err := AddWorktree(wtPath, "existing-branch", CopyOptions{})
+	err := AddWorktree(t.Context(), wtPath, "existing-branch", CopyOptions{})
 	if err != nil {
 		t.Fatalf("AddWorktree failed: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestAddWorktree(t *testing.T) {
 	}
 
 	// Verify it appears in worktree list
-	wt, err := FindWorktreeByBranch("existing-branch")
+	wt, err := FindWorktreeByBranch(t.Context(), "existing-branch")
 	if err != nil {
 		t.Fatalf("FindWorktreeByBranch failed: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestAddWorktreeWithNewBranch(t *testing.T) {
 	defer restore()
 
 	wtPath := filepath.Join(repo.ParentDir(), "worktree-new")
-	err := AddWorktreeWithNewBranch(wtPath, "new-branch", CopyOptions{})
+	err := AddWorktreeWithNewBranch(t.Context(), wtPath, "new-branch", CopyOptions{})
 	if err != nil {
 		t.Fatalf("AddWorktreeWithNewBranch failed: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestAddWorktreeWithNewBranch(t *testing.T) {
 	}
 
 	// Verify branch was created
-	exists, err := LocalBranchExists("new-branch")
+	exists, err := LocalBranchExists(t.Context(), "new-branch")
 	if err != nil {
 		t.Fatalf("LocalBranchExists failed: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestAddWorktreeWithNewBranch(t *testing.T) {
 	}
 
 	// Verify it appears in worktree list
-	wt, err := FindWorktreeByBranch("new-branch")
+	wt, err := FindWorktreeByBranch(t.Context(), "new-branch")
 	if err != nil {
 		t.Fatalf("FindWorktreeByBranch failed: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestRemoveWorktree(t *testing.T) {
 	defer restore()
 
 	// Verify worktree exists
-	wt, err := FindWorktreeByBranch("to-remove")
+	wt, err := FindWorktreeByBranch(t.Context(), "to-remove")
 	if err != nil {
 		t.Fatalf("FindWorktreeByBranch failed: %v", err)
 	}
@@ -226,13 +226,13 @@ func TestRemoveWorktree(t *testing.T) {
 	}
 
 	// Remove worktree
-	err = RemoveWorktree(wtPath, false)
+	err = RemoveWorktree(t.Context(), wtPath, false)
 	if err != nil {
 		t.Fatalf("RemoveWorktree failed: %v", err)
 	}
 
 	// Verify worktree no longer exists
-	wt, err = FindWorktreeByBranch("to-remove")
+	wt, err = FindWorktreeByBranch(t.Context(), "to-remove")
 	if err != nil {
 		t.Fatalf("FindWorktreeByBranch failed: %v", err)
 	}
@@ -259,13 +259,13 @@ func TestRemoveWorktree_Force(t *testing.T) {
 	defer restore()
 
 	// Force remove worktree
-	err := RemoveWorktree(wtPath, true)
+	err := RemoveWorktree(t.Context(), wtPath, true)
 	if err != nil {
 		t.Fatalf("RemoveWorktree(force) failed: %v", err)
 	}
 
 	// Verify worktree no longer exists
-	wt, err := FindWorktreeByBranch("dirty")
+	wt, err := FindWorktreeByBranch(t.Context(), "dirty")
 	if err != nil {
 		t.Fatalf("FindWorktreeByBranch failed: %v", err)
 	}

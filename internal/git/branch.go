@@ -1,14 +1,15 @@
 package git
 
 import (
+	"context"
 	"os"
 	"strings"
 )
 
 // BranchExists checks if a branch exists (local or remote).
-func BranchExists(name string) (bool, error) {
+func BranchExists(ctx context.Context, name string) (bool, error) {
 	// Check local branch
-	cmd, err := gitCommand("show-ref", "--verify", "--quiet", "refs/heads/"+name)
+	cmd, err := gitCommand(ctx, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
 	if err != nil {
 		return false, err
 	}
@@ -17,7 +18,7 @@ func BranchExists(name string) (bool, error) {
 	}
 
 	// Check remote branch (origin)
-	cmd, err = gitCommand("show-ref", "--verify", "--quiet", "refs/remotes/origin/"+name)
+	cmd, err = gitCommand(ctx, "show-ref", "--verify", "--quiet", "refs/remotes/origin/"+name)
 	if err != nil {
 		return false, err
 	}
@@ -29,8 +30,8 @@ func BranchExists(name string) (bool, error) {
 }
 
 // LocalBranchExists checks if a local branch exists.
-func LocalBranchExists(name string) (bool, error) {
-	cmd, err := gitCommand("show-ref", "--verify", "--quiet", "refs/heads/"+name)
+func LocalBranchExists(ctx context.Context, name string) (bool, error) {
+	cmd, err := gitCommand(ctx, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
 	if err != nil {
 		return false, err
 	}
@@ -41,8 +42,8 @@ func LocalBranchExists(name string) (bool, error) {
 }
 
 // CreateBranch creates a new branch at the current HEAD.
-func CreateBranch(name string) error {
-	cmd, err := gitCommand("branch", name)
+func CreateBranch(ctx context.Context, name string) error {
+	cmd, err := gitCommand(ctx, "branch", name)
 	if err != nil {
 		return err
 	}
@@ -53,12 +54,12 @@ func CreateBranch(name string) error {
 
 // DeleteBranch deletes a branch.
 // If force is true, it uses -D (force delete), otherwise -d (safe delete).
-func DeleteBranch(name string, force bool) error {
+func DeleteBranch(ctx context.Context, name string, force bool) error {
 	flag := "-d"
 	if force {
 		flag = "-D"
 	}
-	cmd, err := gitCommand("branch", flag, name)
+	cmd, err := gitCommand(ctx, "branch", flag, name)
 	if err != nil {
 		return err
 	}
@@ -68,8 +69,8 @@ func DeleteBranch(name string, force bool) error {
 }
 
 // IsBranchMerged checks if a branch is merged into the current branch.
-func IsBranchMerged(name string) (bool, error) {
-	cmd, err := gitCommand("branch", "--merged")
+func IsBranchMerged(ctx context.Context, name string) (bool, error) {
+	cmd, err := gitCommand(ctx, "branch", "--merged")
 	if err != nil {
 		return false, err
 	}
@@ -90,8 +91,8 @@ func IsBranchMerged(name string) (bool, error) {
 }
 
 // ListBranches returns a list of all local branch names.
-func ListBranches() ([]string, error) {
-	cmd, err := gitCommand("branch", "--format=%(refname:short)")
+func ListBranches(ctx context.Context) ([]string, error) {
+	cmd, err := gitCommand(ctx, "branch", "--format=%(refname:short)")
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +112,9 @@ func ListBranches() ([]string, error) {
 }
 
 // GetDefaultBranch returns the default branch name (e.g., main, master).
-func GetDefaultBranch() (string, error) {
+func GetDefaultBranch(ctx context.Context) (string, error) {
 	// Try to get from remote origin
-	cmd, err := gitCommand("symbolic-ref", "refs/remotes/origin/HEAD", "--short")
+	cmd, err := gitCommand(ctx, "symbolic-ref", "refs/remotes/origin/HEAD", "--short")
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +128,7 @@ func GetDefaultBranch() (string, error) {
 
 	// Fallback: check common default branch names
 	for _, name := range []string{"main", "master"} {
-		exists, err := LocalBranchExists(name)
+		exists, err := LocalBranchExists(ctx, name)
 		if err != nil {
 			continue
 		}

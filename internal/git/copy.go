@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,22 +22,22 @@ type CopyOptions struct {
 }
 
 // GetCopyOptions retrieves copy options from git config.
-func GetCopyOptions() (CopyOptions, error) {
+func GetCopyOptions(ctx context.Context) (CopyOptions, error) {
 	opts := CopyOptions{}
 
-	val, err := GetConfig(configKeyCopyIgnored)
+	val, err := GetConfig(ctx, configKeyCopyIgnored)
 	if err != nil {
 		return opts, err
 	}
 	opts.CopyIgnored = val == "true"
 
-	val, err = GetConfig(configKeyCopyUntracked)
+	val, err = GetConfig(ctx, configKeyCopyUntracked)
 	if err != nil {
 		return opts, err
 	}
 	opts.CopyUntracked = val == "true"
 
-	val, err = GetConfig(configKeyCopyModified)
+	val, err = GetConfig(ctx, configKeyCopyModified)
 	if err != nil {
 		return opts, err
 	}
@@ -46,11 +47,11 @@ func GetCopyOptions() (CopyOptions, error) {
 }
 
 // CopyFilesToWorktree copies files to the new worktree based on options.
-func CopyFilesToWorktree(srcRoot, dstRoot string, opts CopyOptions) error {
+func CopyFilesToWorktree(ctx context.Context, srcRoot, dstRoot string, opts CopyOptions) error {
 	var files []string
 
 	if opts.CopyIgnored {
-		ignored, err := listIgnoredFiles(srcRoot)
+		ignored, err := listIgnoredFiles(ctx, srcRoot)
 		if err != nil {
 			return err
 		}
@@ -58,7 +59,7 @@ func CopyFilesToWorktree(srcRoot, dstRoot string, opts CopyOptions) error {
 	}
 
 	if opts.CopyUntracked {
-		untracked, err := listUntrackedFiles(srcRoot)
+		untracked, err := listUntrackedFiles(ctx, srcRoot)
 		if err != nil {
 			return err
 		}
@@ -66,7 +67,7 @@ func CopyFilesToWorktree(srcRoot, dstRoot string, opts CopyOptions) error {
 	}
 
 	if opts.CopyModified {
-		modified, err := listModifiedFiles(srcRoot)
+		modified, err := listModifiedFiles(ctx, srcRoot)
 		if err != nil {
 			return err
 		}
@@ -94,8 +95,8 @@ func CopyFilesToWorktree(srcRoot, dstRoot string, opts CopyOptions) error {
 }
 
 // listIgnoredFiles returns files ignored by .gitignore.
-func listIgnoredFiles(root string) ([]string, error) {
-	cmd, err := gitCommand("ls-files", "--others", "--ignored", "--exclude-standard")
+func listIgnoredFiles(ctx context.Context, root string) ([]string, error) {
+	cmd, err := gitCommand(ctx, "ls-files", "--others", "--ignored", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +109,8 @@ func listIgnoredFiles(root string) ([]string, error) {
 }
 
 // listUntrackedFiles returns untracked files (not ignored).
-func listUntrackedFiles(root string) ([]string, error) {
-	cmd, err := gitCommand("ls-files", "--others", "--exclude-standard")
+func listUntrackedFiles(ctx context.Context, root string) ([]string, error) {
+	cmd, err := gitCommand(ctx, "ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +123,8 @@ func listUntrackedFiles(root string) ([]string, error) {
 }
 
 // listModifiedFiles returns tracked files with modifications.
-func listModifiedFiles(root string) ([]string, error) {
-	cmd, err := gitCommand("ls-files", "--modified")
+func listModifiedFiles(ctx context.Context, root string) ([]string, error) {
+	cmd, err := gitCommand(ctx, "ls-files", "--modified")
 	if err != nil {
 		return nil, err
 	}

@@ -1,15 +1,16 @@
 package git
 
 import (
+	"context"
 	"os/exec"
 )
 
-// gitCommand creates an exec.Cmd for git with the given arguments.
+// gitCommand creates an exec.Cmd for git with the given context and arguments.
 // It uses exec.LookPath to look up the git binary path.
-func gitCommand(args ...string) (*exec.Cmd, error) {
+func gitCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
 	gitPath, err := exec.LookPath("git")
 	if err != nil {
 		return nil, err
 	}
-	return exec.Command(gitPath, args...), nil
+	return exec.CommandContext(ctx, gitPath, args...), nil
 }

@@ -79,7 +79,7 @@ func TestGetCopyOptions(t *testing.T) {
 			tt.setup()
 			defer tt.cleanup()
 
-			got, err := GetCopyOptions()
+			got, err := GetCopyOptions(t.Context())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -110,7 +110,7 @@ func TestCopyFilesToWorktree_Ignored(t *testing.T) {
 	defer restore()
 
 	opts := CopyOptions{CopyIgnored: true}
-	err := CopyFilesToWorktree(repo.Root, dstDir, opts)
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
 	if err != nil {
 		t.Fatalf("CopyFilesToWorktree failed: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestCopyFilesToWorktree_Untracked(t *testing.T) {
 	defer restore()
 
 	opts := CopyOptions{CopyUntracked: true}
-	err := CopyFilesToWorktree(repo.Root, dstDir, opts)
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
 	if err != nil {
 		t.Fatalf("CopyFilesToWorktree failed: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestCopyFilesToWorktree_Modified(t *testing.T) {
 	defer restore()
 
 	opts := CopyOptions{CopyModified: true}
-	err := CopyFilesToWorktree(repo.Root, dstDir, opts)
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
 	if err != nil {
 		t.Fatalf("CopyFilesToWorktree failed: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestCopyFilesToWorktree_NoOptions(t *testing.T) {
 
 	// No copy options enabled
 	opts := CopyOptions{}
-	err := CopyFilesToWorktree(repo.Root, dstDir, opts)
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
 	if err != nil {
 		t.Fatalf("CopyFilesToWorktree failed: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestCopyFilesToWorktree_Subdirectory(t *testing.T) {
 	defer restore()
 
 	opts := CopyOptions{CopyIgnored: true}
-	err := CopyFilesToWorktree(repo.Root, dstDir, opts)
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
 	if err != nil {
 		t.Fatalf("CopyFilesToWorktree failed: %v", err)
 	}
