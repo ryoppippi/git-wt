@@ -74,12 +74,12 @@ const fishGitWrapper = `
 # Override git command to cd after 'git wt <branch>'
 function git --wraps git
     if test "$argv[1]" = "wt"
-        set -l result (command git wt $argv[2..])
+        set -l result (command git wt $argv[2..] | string collect)
         set -l exit_code $status
         if test $exit_code -eq 0 -a -d "$result"
             cd "$result"
         else
-            echo "$result"
+            printf "%s\n" "$result"
             return $exit_code
         end
     else
