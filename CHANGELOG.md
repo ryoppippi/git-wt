@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.3.0](https://github.com/k1LoW/git-wt/compare/v0.2.3...v0.3.0) - 2025-12-27
+### Breaking Changes 🛠
+- fix: set gostyle by @k1LoW in https://github.com/k1LoW/git-wt/pull/16
+### Fix bug 🐛
+- Fix git-wt fish hook output formatting by @osamu2001 in https://github.com/k1LoW/git-wt/pull/14
+### Other Changes
+- feat: add context.Context support to all git operations by @k1LoW in https://github.com/k1LoW/git-wt/pull/15
+
 ## [v0.2.3](https://github.com/k1LoW/git-wt/compare/v0.2.2...v0.2.3) - 2025-12-26
 ### Fix bug 🐛
 - fix: enhance worktree handling with directory name support by @k1LoW in https://github.com/k1LoW/git-wt/pull/11
