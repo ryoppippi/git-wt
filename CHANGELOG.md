@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.7.0](https://github.com/k1LoW/git-wt/compare/v0.6.0...v0.7.0) - 2026-01-05
+### Breaking Changes 🛠
+- fix: improve list layout by @k1LoW in https://github.com/k1LoW/git-wt/pull/33
+### New Features 🎉
+- fix: enable flag completion in shell integration by @k1LoW in https://github.com/k1LoW/git-wt/pull/35
+- feat: add descriptions to branch/worktree completion by @k1LoW in https://github.com/k1LoW/git-wt/pull/36
+
 ## [v0.6.0](https://github.com/k1LoW/git-wt/compare/v0.5.2...v0.6.0) - 2026-01-04
 ### New Features 🎉
 - feat: add `wt.hooks` config and `--hook` flag to run commands after creating new worktree by @k1LoW in https://github.com/k1LoW/git-wt/pull/29
