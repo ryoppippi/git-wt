@@ -1671,6 +1671,183 @@ func TestE2E_Complete(t *testing.T) {
 	})
 }
 
+// TestE2E_CreateMultipleWorktrees tests creating multiple worktrees in a single command.
+func TestE2E_CreateMultipleWorktrees(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create multiple worktrees at once
+	stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "branch-a", "branch-b", "branch-c")
+	if err != nil {
+		t.Fatalf("git-wt with multiple args failed: %v\nstderr: %s", err, stderr)
+	}
+
+	// stdout should contain all worktree paths (one per line)
+	stdoutLines := strings.Split(stdout, "\n")
+	if len(stdoutLines) != 3 {
+		t.Errorf("stdout should have 3 lines (one per worktree), got %d lines: %q", len(stdoutLines), stdout)
+	}
+	if !strings.Contains(stdout, "branch-a") {
+		t.Errorf("stdout should contain 'branch-a', got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "branch-b") {
+		t.Errorf("stdout should contain 'branch-b', got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "branch-c") {
+		t.Errorf("stdout should contain 'branch-c', got: %s", stdout)
+	}
+
+	// Verify all worktrees were created
+	for _, branch := range []string{"branch-a", "branch-b", "branch-c"} {
+		out, err := runGitWt(t, binPath, repo.Root, branch)
+		if err != nil {
+			t.Errorf("worktree for %s should exist: %v", branch, err)
+			continue
+		}
+		wtPath := worktreePath(out)
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Errorf("worktree directory for %s should exist at %s", branch, wtPath)
+		}
+	}
+}
+
+// TestE2E_CreateMultipleWorktrees_AllPathsToStdout tests that all paths go to stdout.
+func TestE2E_CreateMultipleWorktrees_AllPathsToStdout(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create multiple worktrees
+	stdout, _, err := runGitWtStdout(t, binPath, repo.Root, "multi-a", "multi-b")
+	if err != nil {
+		t.Fatalf("git-wt failed: %v", err)
+	}
+
+	// stdout should contain both paths
+	lines := strings.Split(stdout, "\n")
+	if len(lines) != 2 {
+		t.Errorf("stdout should have 2 lines, got %d: %q", len(lines), stdout)
+	}
+
+	// Both paths should be valid directories
+	for _, line := range lines {
+		info, err := os.Stat(line)
+		if err != nil {
+			t.Errorf("path does not exist: %s", line)
+		} else if !info.IsDir() {
+			t.Errorf("path should be a directory, got: %s", line)
+		}
+	}
+
+	// stdout should contain both worktree names
+	if !strings.Contains(stdout, "multi-a") {
+		t.Errorf("stdout should contain 'multi-a', got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "multi-b") {
+		t.Errorf("stdout should contain 'multi-b', got: %s", stdout)
+	}
+}
+
+// TestE2E_DeleteMultipleWorktrees tests deleting multiple worktrees in a single command.
+func TestE2E_DeleteMultipleWorktrees(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create multiple worktrees first
+	_, err := runGitWt(t, binPath, repo.Root, "del-a", "del-b", "del-c")
+	if err != nil {
+		t.Fatalf("failed to create worktrees: %v", err)
+	}
+
+	// Get paths before deletion
+	outA, err := runGitWt(t, binPath, repo.Root, "del-a")
+	if err != nil {
+		t.Fatalf("failed to get worktree path for del-a: %v", err)
+	}
+	outB, err := runGitWt(t, binPath, repo.Root, "del-b")
+	if err != nil {
+		t.Fatalf("failed to get worktree path for del-b: %v", err)
+	}
+	outC, err := runGitWt(t, binPath, repo.Root, "del-c")
+	if err != nil {
+		t.Fatalf("failed to get worktree path for del-c: %v", err)
+	}
+	pathA := worktreePath(outA)
+	pathB := worktreePath(outB)
+	pathC := worktreePath(outC)
+
+	// Delete all worktrees at once
+	out, err := runGitWt(t, binPath, repo.Root, "-D", "del-a", "del-b", "del-c")
+	if err != nil {
+		t.Fatalf("git-wt -D with multiple args failed: %v\noutput: %s", err, out)
+	}
+
+	// Verify all worktrees were deleted
+	for _, path := range []string{pathA, pathB, pathC} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("worktree should have been deleted at %s", path)
+		}
+	}
+
+	// Verify output contains deletion messages for all
+	if !strings.Contains(out, "del-a") {
+		t.Errorf("output should contain deletion message for 'del-a', got: %s", out)
+	}
+	if !strings.Contains(out, "del-b") {
+		t.Errorf("output should contain deletion message for 'del-b', got: %s", out)
+	}
+	if !strings.Contains(out, "del-c") {
+		t.Errorf("output should contain deletion message for 'del-c', got: %s", out)
+	}
+}
+
+// TestE2E_DeleteMultipleWorktrees_StopsOnError tests that deletion stops on first error.
+func TestE2E_DeleteMultipleWorktrees_StopsOnError(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create two worktrees
+	_, err := runGitWt(t, binPath, repo.Root, "stop-a", "stop-c")
+	if err != nil {
+		t.Fatalf("failed to create worktrees: %v", err)
+	}
+
+	// Get path for stop-c before deletion attempt
+	outC, err := runGitWt(t, binPath, repo.Root, "stop-c")
+	if err != nil {
+		t.Fatalf("failed to get worktree path for stop-c: %v", err)
+	}
+	pathC := worktreePath(outC)
+
+	// Try to delete: stop-a (exists), stop-b (does NOT exist), stop-c (exists)
+	// Should fail on stop-b and NOT delete stop-c
+	out, err := runGitWt(t, binPath, repo.Root, "-D", "stop-a", "stop-b", "stop-c")
+	if err == nil {
+		t.Fatal("command should fail when deleting non-existent worktree")
+	}
+
+	// Verify error message mentions stop-b
+	if !strings.Contains(out, "stop-b") {
+		t.Errorf("error should mention 'stop-b', got: %s", out)
+	}
+
+	// Verify stop-c was NOT deleted (execution stopped at stop-b error)
+	if _, err := os.Stat(pathC); os.IsNotExist(err) {
+		t.Error("stop-c should NOT have been deleted (execution should stop on error)")
+	}
+}
+
 // TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.
 func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 	// PowerShell init script uses git.exe which is Windows-specific

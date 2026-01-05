@@ -116,7 +116,7 @@ Configuration:
     Default: false
     Example: git config wt.nocd true`,
 	RunE:              runRoot,
-	Args:              cobra.MaximumNArgs(1),
+	Args:              cobra.ArbitraryArgs,
 	ValidArgsFunction: completeBranches,
 	SilenceUsage:      true,
 	Version:           version.Version,
@@ -159,18 +159,19 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return listWorktrees(ctx)
 	}
 
-	branch := args[0]
+	// Remove duplicates while preserving order
+	args = uniqueArgs(args)
 
 	// Handle delete flags
 	if forceDeleteFlag {
-		return deleteWorktree(ctx, branch, true)
+		return deleteWorktrees(ctx, args, true)
 	}
 	if deleteFlag {
-		return deleteWorktree(ctx, branch, false)
+		return deleteWorktrees(ctx, args, false)
 	}
 
-	// Default: create or switch to worktree
-	return handleWorktree(ctx, cmd, branch)
+	// Default: create or switch to worktrees
+	return handleWorktrees(ctx, cmd, args)
 }
 
 // loadConfig loads config from git config and applies flag overrides.
@@ -373,72 +374,56 @@ func listWorktrees(ctx context.Context) error {
 	return nil
 }
 
-func deleteWorktree(ctx context.Context, branch string, force bool) error {
-	// Find worktree by branch or directory name
-	wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
-	if err != nil {
-		return fmt.Errorf("failed to find worktree: %w", err)
-	}
-
-	if wt == nil {
-		return fmt.Errorf("no worktree found for branch or directory %q", branch)
-	}
-
-	// Remove worktree
-	if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
-		return fmt.Errorf("failed to remove worktree: %w", err)
-	}
-
-	// Delete branch (only if it exists as a local branch)
-	// Let git branch -d/-D handle the merge check
-	exists, err := git.LocalBranchExists(ctx, wt.Branch)
-	if err != nil {
-		return fmt.Errorf("failed to check branch existence: %w", err)
-	}
-
-	wtDir, err := git.WorktreeDirName(ctx, wt)
-	if err != nil {
-		return fmt.Errorf("failed to get worktree directory name: %w", err)
-	}
-
-	if exists {
-		if err := git.DeleteBranch(ctx, wt.Branch, force); err != nil {
-			return fmt.Errorf("failed to delete branch (use -D to force): %w", err)
+func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
+	for _, branch := range branches {
+		// Find worktree by branch or directory name
+		wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
+		if err != nil {
+			return fmt.Errorf("failed to find worktree: %w", err)
 		}
-		if wtDir == wt.Branch {
-			fmt.Printf("Deleted worktree and branch %q\n", wt.Branch)
+
+		if wt == nil {
+			return fmt.Errorf("no worktree found for branch or directory %q", branch)
+		}
+
+		// Remove worktree
+		if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
+			return fmt.Errorf("failed to remove worktree: %w", err)
+		}
+
+		// Delete branch (only if it exists as a local branch)
+		// Let git branch -d/-D handle the merge check
+		exists, err := git.LocalBranchExists(ctx, wt.Branch)
+		if err != nil {
+			return fmt.Errorf("failed to check branch existence: %w", err)
+		}
+
+		wtDir, err := git.WorktreeDirName(ctx, wt)
+		if err != nil {
+			return fmt.Errorf("failed to get worktree directory name: %w", err)
+		}
+
+		if exists {
+			if err := git.DeleteBranch(ctx, wt.Branch, force); err != nil {
+				return fmt.Errorf("failed to delete branch (use -D to force): %w", err)
+			}
+			if wtDir == wt.Branch {
+				fmt.Printf("Deleted worktree and branch %q\n", wt.Branch)
+			} else {
+				fmt.Printf("Deleted worktree %q and branch %q\n", wtDir, wt.Branch)
+			}
 		} else {
-			fmt.Printf("Deleted worktree %q and branch %q\n", wtDir, wt.Branch)
+			fmt.Printf("Deleted worktree %q (branch %q did not exist locally)\n", wtDir, wt.Branch)
 		}
-	} else {
-		fmt.Printf("Deleted worktree %q (branch %q did not exist locally)\n", wtDir, wt.Branch)
 	}
 	return nil
 }
 
-func handleWorktree(ctx context.Context, cmd *cobra.Command, branch string) error {
+func handleWorktrees(ctx context.Context, cmd *cobra.Command, branches []string) error {
 	// Load config with flag overrides
 	cfg, err := loadConfig(ctx, cmd)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Check if worktree already exists for this branch or directory name
-	wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
-	if err != nil {
-		return fmt.Errorf("failed to find worktree: %w", err)
-	}
-
-	if wt != nil {
-		// Worktree exists, print path for shell integration
-		fmt.Println(wt.Path)
-		return nil
-	}
-
-	// Get worktree path
-	wtPath, err := git.WorktreePathFor(ctx, cfg.BaseDir, branch)
-	if err != nil {
-		return fmt.Errorf("failed to get worktree path: %w", err)
 	}
 
 	// Build copy options from config
@@ -449,32 +434,65 @@ func handleWorktree(ctx context.Context, cmd *cobra.Command, branch string) erro
 		NoCopy:        cfg.NoCopy,
 	}
 
-	// Check if branch exists
-	exists, err := git.BranchExists(ctx, branch)
-	if err != nil {
-		return fmt.Errorf("failed to check branch: %w", err)
-	}
-
-	if exists {
-		// Branch exists, create worktree with existing branch
-		if err := git.AddWorktree(ctx, wtPath, branch, copyOpts); err != nil {
-			return fmt.Errorf("failed to create worktree: %w", err)
+	for _, branch := range branches {
+		// Check if worktree already exists for this branch or directory name
+		wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
+		if err != nil {
+			return fmt.Errorf("failed to find worktree: %w", err)
 		}
-	} else {
-		// Branch doesn't exist, create new branch and worktree
-		if err := git.AddWorktreeWithNewBranch(ctx, wtPath, branch, copyOpts); err != nil {
-			return fmt.Errorf("failed to create worktree with new branch: %w", err)
-		}
-	}
 
-	// Run hooks after creating new worktree
-	if err := git.RunHooks(ctx, cfg.Hooks, wtPath, os.Stderr); err != nil {
-		// Print path but return error so shell integration won't cd
+		if wt != nil {
+			// Worktree exists, print path to stdout
+			fmt.Println(wt.Path)
+			continue
+		}
+
+		// Get worktree path
+		wtPath, err := git.WorktreePathFor(ctx, cfg.BaseDir, branch)
+		if err != nil {
+			return fmt.Errorf("failed to get worktree path: %w", err)
+		}
+
+		// Check if branch exists
+		exists, err := git.BranchExists(ctx, branch)
+		if err != nil {
+			return fmt.Errorf("failed to check branch: %w", err)
+		}
+
+		if exists {
+			// Branch exists, create worktree with existing branch
+			if err := git.AddWorktree(ctx, wtPath, branch, copyOpts); err != nil {
+				return fmt.Errorf("failed to create worktree: %w", err)
+			}
+		} else {
+			// Branch doesn't exist, create new branch and worktree
+			if err := git.AddWorktreeWithNewBranch(ctx, wtPath, branch, copyOpts); err != nil {
+				return fmt.Errorf("failed to create worktree with new branch: %w", err)
+			}
+		}
+
+		// Run hooks after creating new worktree
+		if err := git.RunHooks(ctx, cfg.Hooks, wtPath, os.Stderr); err != nil {
+			// Print path but return error so shell integration won't cd
+			fmt.Println(wtPath)
+			return err
+		}
+
+		// Print path to stdout
 		fmt.Println(wtPath)
-		return err
 	}
-
-	// Print path for shell integration
-	fmt.Println(wtPath)
 	return nil
+}
+
+// uniqueArgs removes duplicates from args while preserving order.
+func uniqueArgs(args []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(args))
+	for _, arg := range args {
+		if _, ok := seen[arg]; !ok {
+			seen[arg] = struct{}{}
+			result = append(result, arg)
+		}
+	}
+	return result
 }

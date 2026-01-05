@@ -27,11 +27,18 @@ git() {
         local result
         result=$(command git wt "${args[@]}")
         local exit_code=$?
-        if [[ $exit_code -eq 0 && -d "$result" ]]; then
+        # Get the last line for cd target
+        local last_line
+        last_line=$(echo "$result" | tail -n 1)
+        if [[ $exit_code -eq 0 && -d "$last_line" ]]; then
+            # Print all lines except the last (intermediate paths)
+            echo "$result" | sed '$d' | while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "$line"
+            done
             if [[ "$no_switch" == "true" ]]; then
-                echo "$result"
+                echo "$last_line"
             else
-                cd "$result"
+                cd "$last_line"
             fi
         else
             echo "$result"
@@ -76,11 +83,18 @@ git() {
         local result
         result=$(command git wt "${args[@]}")
         local exit_code=$?
-        if [[ $exit_code -eq 0 && -d "$result" ]]; then
+        # Get the last line for cd target
+        local last_line
+        last_line=$(echo "$result" | tail -n 1)
+        if [[ $exit_code -eq 0 && -d "$last_line" ]]; then
+            # Print all lines except the last (intermediate paths)
+            echo "$result" | sed '$d' | while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "$line"
+            done
             if [[ "$no_switch" == "true" ]]; then
-                echo "$result"
+                echo "$last_line"
             else
-                cd "$result"
+                cd "$last_line"
             fi
         else
             echo "$result"
@@ -143,16 +157,24 @@ function git --wraps git
                 break
             end
         end
-        set -l result (command git wt $argv[2..] | string collect)
+        set -l result (command git wt $argv[2..])
         set -l exit_code $status
-        if test $exit_code -eq 0 -a -d "$result"
+        # Get the last line for cd target
+        set -l last_line $result[-1]
+        if test $exit_code -eq 0 -a -d "$last_line"
+            # Print all lines except the last (intermediate paths)
+            for line in $result[1..-2]
+                printf "%s\n" "$line"
+            end
             if test "$no_switch" = "true"
-                printf "%s\n" "$result"
+                printf "%s\n" "$last_line"
             else
-                cd "$result"
+                cd "$last_line"
             end
         else
-            printf "%s\n" "$result"
+            for line in $result
+                printf "%s\n" "$line"
+            end
             return $exit_code
         end
     else
@@ -177,36 +199,42 @@ complete -c git -n '__fish_git_wt_needs_completion' -f -a '(__fish_git_wt_comple
 `
 
 // PowerShell hooks.
-const powershellGitWrapper = `
-# Override git command to cd after 'git wt <branch>'
-function Invoke-Git {
-    if ($args[0] -eq "wt") {
-        $wtArgs = $args[1..($args.Length-1)]
-        $noSwitch = ($wtArgs -contains "--nocd") -or ($wtArgs -contains "--no-switch-directory")
-        # Check wt.nocd config
-        if (-not $noSwitch) {
-            $nocdConfig = & git.exe config --get wt.nocd 2>$null
-            if ($nocdConfig -eq "true") {
-                $noSwitch = $true
-            }
-        }
-        $result = & git.exe wt @wtArgs 2>&1
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $result -PathType Container)) {
-            if ($noSwitch) {
-                Write-Output $result
-            } else {
-                Set-Location $result
-            }
-        } else {
-            Write-Output $result
-            return $LASTEXITCODE
-        }
-    } else {
-        & git.exe @args
-    }
-}
-Set-Alias -Name git -Value Invoke-Git -Option AllScope
-`
+const powershellGitWrapper = "" +
+	"# Override git command to cd after 'git wt <branch>'\n" +
+	"function Invoke-Git {\n" +
+	"    if ($args[0] -eq \"wt\") {\n" +
+	"        $wtArgs = $args[1..($args.Length-1)]\n" +
+	"        $noSwitch = ($wtArgs -contains \"--nocd\") -or ($wtArgs -contains \"--no-switch-directory\")\n" +
+	"        # Check wt.nocd config\n" +
+	"        if (-not $noSwitch) {\n" +
+	"            $nocdConfig = & git.exe config --get wt.nocd 2>$null\n" +
+	"            if ($nocdConfig -eq \"true\") {\n" +
+	"                $noSwitch = $true\n" +
+	"            }\n" +
+	"        }\n" +
+	"        $result = & git.exe wt @wtArgs 2>&1\n" +
+	"        # Get the last line for cd target\n" +
+	"        $lines = @($result -split \"`n\" | Where-Object { $_ -ne \"\" })\n" +
+	"        $lastLine = $lines[-1]\n" +
+	"        if ($LASTEXITCODE -eq 0 -and (Test-Path $lastLine -PathType Container)) {\n" +
+	"            # Print all lines except the last (intermediate paths)\n" +
+	"            if ($lines.Count -gt 1) {\n" +
+	"                $lines[0..($lines.Count-2)] | ForEach-Object { Write-Output $_ }\n" +
+	"            }\n" +
+	"            if ($noSwitch) {\n" +
+	"                Write-Output $lastLine\n" +
+	"            } else {\n" +
+	"                Set-Location $lastLine\n" +
+	"            }\n" +
+	"        } else {\n" +
+	"            Write-Output $result\n" +
+	"            return $LASTEXITCODE\n" +
+	"        }\n" +
+	"    } else {\n" +
+	"        & git.exe @args\n" +
+	"    }\n" +
+	"}\n" +
+	"Set-Alias -Name git -Value Invoke-Git -Option AllScope\n"
 
 const powershellCompletion = `
 # git wt <branch> completion for PowerShell
