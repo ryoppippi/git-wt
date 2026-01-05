@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.8.0](https://github.com/k1LoW/git-wt/compare/v0.7.0...v0.8.0) - 2026-01-05
+### Breaking Changes 🛠
+- fix: rename `--no-switch-directory` flag to `--nocd` by @k1LoW in https://github.com/k1LoW/git-wt/pull/37
+### New Features 🎉
+- feat: add `wt.nocd` config option to disable directory switching by default by @k1LoW in https://github.com/k1LoW/git-wt/pull/39
+### Other Changes
+- chore: improve delete message when worktree dir differs from branch name by @k1LoW in https://github.com/k1LoW/git-wt/pull/40
+
 ## [v0.7.0](https://github.com/k1LoW/git-wt/compare/v0.6.0...v0.7.0) - 2026-01-05
 ### Breaking Changes 🛠
 - fix: improve list layout by @k1LoW in https://github.com/k1LoW/git-wt/pull/33
