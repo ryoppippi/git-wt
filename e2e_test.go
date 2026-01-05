@@ -1686,7 +1686,7 @@ func TestE2E_CreateMultipleWorktrees(t *testing.T) {
 	}
 
 	// stdout should contain all worktree paths (one per line)
-	stdoutLines := strings.Split(stdout, "\n")
+	stdoutLines := strings.Split(strings.TrimSpace(stdout), "\n")
 	if len(stdoutLines) != 3 {
 		t.Errorf("stdout should have 3 lines (one per worktree), got %d lines: %q", len(stdoutLines), stdout)
 	}
@@ -1729,7 +1729,7 @@ func TestE2E_CreateMultipleWorktrees_AllPathsToStdout(t *testing.T) {
 	}
 
 	// stdout should contain both paths
-	lines := strings.Split(stdout, "\n")
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	if len(lines) != 2 {
 		t.Errorf("stdout should have 2 lines, got %d: %q", len(lines), stdout)
 	}
