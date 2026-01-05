@@ -210,43 +210,84 @@ func completeBranches(cmd *cobra.Command, args []string, toComplete string) ([]s
 		return nil, cobra.ShellCompDirectiveError
 	}
 
+	// Track which names are worktrees
+	worktreeNames := make(map[string]struct{})
+
 	// Add branches and directory names from existing worktrees
 	worktrees, err := git.ListWorktrees(ctx)
 	if err == nil {
 		for _, wt := range worktrees {
-			// Add branch name
-			if wt.Branch != "" && wt.Branch != "(detached)" {
-				if _, exists := seen[wt.Branch]; !exists {
-					seen[wt.Branch] = struct{}{}
-					completions = append(completions, wt.Branch)
+			// Get worktree directory name (relative path from base dir)
+			var wtDirName string
+			if baseDir != "" {
+				if relPath, err := filepath.Rel(baseDir, wt.Path); err == nil && !strings.HasPrefix(relPath, "..") {
+					wtDirName = relPath
 				}
 			}
 
-			// Add worktree directory name (relative path from base dir)
-			if baseDir != "" {
-				relPath, err := filepath.Rel(baseDir, wt.Path)
-				if err == nil && !strings.HasPrefix(relPath, "..") {
-					if _, exists := seen[relPath]; !exists {
-						seen[relPath] = struct{}{}
-						completions = append(completions, relPath)
+			// Add branch name with [branch: worktree=dir] marker
+			if wt.Branch != "" && wt.Branch != "(detached)" {
+				if _, exists := seen[wt.Branch]; !exists {
+					seen[wt.Branch] = struct{}{}
+					worktreeNames[wt.Branch] = struct{}{}
+					wtInfo := wt.Path
+					if wtDirName != "" {
+						wtInfo = wtDirName
 					}
+					desc := fmt.Sprintf("[branch: worktree=%s]", wtInfo)
+					if msg, err := git.BranchCommitMessage(ctx, wt.Branch); err == nil && msg != "" {
+						desc = fmt.Sprintf("[branch: worktree=%s] %s", wtInfo, truncateString(msg, 40))
+					}
+					completions = append(completions, fmt.Sprintf("%s\t%s", wt.Branch, desc))
+				}
+			}
+
+			// Add worktree directory name with [worktree: branch=name] marker
+			if wtDirName != "" {
+				if _, exists := seen[wtDirName]; !exists {
+					seen[wtDirName] = struct{}{}
+					worktreeNames[wtDirName] = struct{}{}
+					branchInfo := wt.Branch
+					if branchInfo == "" || branchInfo == "(detached)" {
+						branchInfo = "detached"
+					}
+					desc := fmt.Sprintf("[worktree: branch=%s]", branchInfo)
+					if msg, err := git.BranchCommitMessage(ctx, wt.Branch); err == nil && msg != "" {
+						desc = fmt.Sprintf("[worktree: branch=%s] %s", branchInfo, truncateString(msg, 40))
+					}
+					completions = append(completions, fmt.Sprintf("%s\t%s", wtDirName, desc))
 				}
 			}
 		}
 	}
 
-	// Add local branches
+	// Add local branches (not already added as worktrees)
 	branches, err := git.ListBranches(ctx)
 	if err == nil {
 		for _, branch := range branches {
 			if _, exists := seen[branch]; !exists {
 				seen[branch] = struct{}{}
-				completions = append(completions, branch)
+				desc := "[branch]"
+				if msg, err := git.BranchCommitMessage(ctx, branch); err == nil && msg != "" {
+					desc = "[branch] " + truncateString(msg, 40)
+				}
+				completions = append(completions, fmt.Sprintf("%s\t%s", branch, desc))
 			}
 		}
 	}
 
 	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func listWorktrees(ctx context.Context) error {

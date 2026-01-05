@@ -111,6 +111,19 @@ func ListBranches(ctx context.Context) ([]string, error) {
 	return branches, nil
 }
 
+// BranchCommitMessage returns the first line of the latest commit message for a branch.
+func BranchCommitMessage(ctx context.Context, branch string) (string, error) {
+	cmd, err := gitCommand(ctx, "log", "-1", "--format=%s", branch, "--")
+	if err != nil {
+		return "", err
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // DefaultBranch returns the default branch name (e.g., main, master).
 func DefaultBranch(ctx context.Context) (string, error) {
 	// Try to get from remote origin

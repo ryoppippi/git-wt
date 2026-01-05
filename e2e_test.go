@@ -1477,6 +1477,78 @@ func TestE2E_Complete(t *testing.T) {
 			t.Errorf("completion should contain '--basedir', got: %s", out)
 		}
 	})
+
+	t.Run("branch_completion_has_description", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Branches without worktree should have [branch] description
+		lines := strings.Split(out, "\n")
+		hasBranchDesc := false
+		for _, line := range lines {
+			if strings.Contains(line, "[branch]") {
+				hasBranchDesc = true
+				break
+			}
+		}
+		if !hasBranchDesc {
+			t.Errorf("branch completion should have [branch] description, got: %s", out)
+		}
+
+		// main branch (worktree) should have [branch: worktree=...] description
+		hasWorktreeDesc := false
+		for _, line := range lines {
+			if strings.HasPrefix(line, "main\t") && strings.Contains(line, "[branch: worktree=") {
+				hasWorktreeDesc = true
+				break
+			}
+		}
+		if !hasWorktreeDesc {
+			t.Errorf("main branch should have [branch: worktree=...] description, got: %s", out)
+		}
+	})
+
+	t.Run("branch_completion_has_commit_message", func(t *testing.T) {
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should contain "initial commit" from the commit message
+		if !strings.Contains(out, "initial commit") {
+			t.Errorf("branch completion should include commit message, got: %s", out)
+		}
+	})
+
+	t.Run("worktree_completion_has_description", func(t *testing.T) {
+		// Create a worktree - the directory name will be the same as branch name
+		_, err := runGitWt(t, binPath, repo.Root, "wt-test-branch")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+
+		out, err := runGitWt(t, binPath, repo.Root, "__complete", "")
+		if err != nil {
+			t.Fatalf("__complete failed: %v\noutput: %s", err, out)
+		}
+
+		// Should have worktree directory with [worktree: branch=...] description
+		// Note: when branch name equals directory name, both entries exist
+		lines := strings.Split(out, "\n")
+		hasWorktreeDirDesc := false
+		for _, line := range lines {
+			// Check for [worktree: branch=...] (directory entry) or [branch: worktree=...] (branch entry)
+			if strings.Contains(line, "[worktree: branch=") || strings.Contains(line, "[branch: worktree=") {
+				hasWorktreeDirDesc = true
+				break
+			}
+		}
+		if !hasWorktreeDirDesc {
+			t.Errorf("worktree completion should have description with worktree info, got: %s", out)
+		}
+	})
 }
 
 // TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.

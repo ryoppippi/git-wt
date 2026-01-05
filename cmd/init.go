@@ -195,9 +195,12 @@ $scriptBlock = {
     param($wordToComplete, $commandAst, $cursorPosition)
     $tokens = $commandAst.ToString() -split '\s+'
     if ($tokens.Count -ge 2 -and $tokens[1] -eq "wt") {
-        $branches = & git-wt.exe __complete $wordToComplete 2>$null | Where-Object { $_ -notmatch '^:' }
-        $branches | ForEach-Object {
-            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        $completions = & git-wt.exe __complete $wordToComplete 2>$null | Where-Object { $_ -notmatch '^:' }
+        $completions | ForEach-Object {
+            $parts = $_ -split [char]9, 2
+            $completion = $parts[0]
+            $tooltip = if ($parts.Count -gt 1) { $parts[1] } else { $parts[0] }
+            [System.Management.Automation.CompletionResult]::new($completion, $completion, 'ParameterValue', $tooltip)
         }
     }
 }
