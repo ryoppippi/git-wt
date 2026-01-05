@@ -174,3 +174,25 @@ $ git wt --nocd feature-branch
 ```
 
 Default: `false`
+
+## Recipes
+
+### peco
+
+You can use [peco](https://github.com/peco/peco) for interactive worktree selection:
+
+``` console
+$ git wt $(git wt | tail -n +2 | peco | awk '{print $(NF-1)}')
+```
+
+### tmux
+
+When creating a new worktree, open and switch to a new tmux window named `{repo}:{branch}`. The working directory will be the new worktree:
+
+``` console
+$ git config wt.nocd true
+$ git config --add wt.hook 'tmux neww -c "$PWD" -n "$(basename -s .git `git remote get-url origin`):$(git branch --show-current)"'
+```
+
+- `wt.nocd true`: Prevents automatic directory change in the current shell, since tmux will open a new window in the worktree directory instead.
+- `wt.hook 'tmux neww ...'`: Creates a new tmux window (`neww`) with `-c "$PWD"` setting the working directory to the new worktree, and `-n "..."` naming the window as `{repo}:{branch}`.
