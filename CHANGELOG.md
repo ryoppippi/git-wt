@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.11.0](https://github.com/k1LoW/git-wt/compare/v0.10.0...v0.11.0) - 2026-01-06
+### New Features 🎉
+- feat: safely delete current worktree and return to repository root by @k1LoW in https://github.com/k1LoW/git-wt/pull/59
+
 ## [v0.10.0](https://github.com/k1LoW/git-wt/compare/v0.9.1...v0.10.0) - 2026-01-06
 ### Breaking Changes 🛠
 - feat: support start-point argument for worktree creation by @k1LoW in https://github.com/k1LoW/git-wt/pull/55
