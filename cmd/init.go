@@ -138,7 +138,7 @@ function git --wraps git
             set no_switch true
         end
         for arg in $argv[2..]
-            if test "$arg" = "--nocd" -o "$arg" = "--no-switch-directory"
+            if string match -q -- "--nocd" "$arg"; or string match -q -- "--no-switch-directory" "$arg"
                 set no_switch true
                 break
             end
