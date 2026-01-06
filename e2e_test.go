@@ -1848,6 +1848,73 @@ func TestE2E_DeleteMultipleWorktrees_StopsOnError(t *testing.T) {
 	}
 }
 
+// TestE2E_DeleteBranchOnly tests deleting a branch that has no associated worktree.
+func TestE2E_DeleteBranchOnly(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Create a branch without a worktree using git branch
+	branchName := "branch-only"
+	cmd := exec.Command("git", "branch", branchName)
+	cmd.Dir = repo.Root
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to create branch: %v", err)
+	}
+
+	// Verify branch exists
+	cmd = exec.Command("git", "branch", "--list", branchName)
+	cmd.Dir = repo.Root
+	out, err := cmd.Output()
+	if err != nil || !strings.Contains(string(out), branchName) {
+		t.Fatalf("branch should exist before deletion")
+	}
+
+	// Delete branch using git-wt -D
+	wtOut, err := runGitWt(t, binPath, repo.Root, "-D", branchName)
+	if err != nil {
+		t.Fatalf("failed to delete branch-only: %v, output: %s", err, wtOut)
+	}
+
+	// Verify output message
+	if !strings.Contains(wtOut, "Deleted branch") || !strings.Contains(wtOut, "no worktree was associated") {
+		t.Errorf("output should indicate branch-only deletion, got: %s", wtOut)
+	}
+
+	// Verify branch no longer exists
+	cmd = exec.Command("git", "branch", "--list", branchName)
+	cmd.Dir = repo.Root
+	out, err = cmd.Output()
+	if err != nil {
+		t.Fatalf("failed to list branches: %v", err)
+	}
+	if strings.Contains(string(out), branchName) {
+		t.Error("branch should have been deleted")
+	}
+}
+
+// TestE2E_DeleteBranchOnly_NotExists tests error when neither worktree nor branch exists.
+func TestE2E_DeleteBranchOnly_NotExists(t *testing.T) {
+	binPath := buildBinary(t)
+
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	// Try to delete non-existent branch
+	out, err := runGitWt(t, binPath, repo.Root, "-D", "non-existent-branch")
+	if err == nil {
+		t.Fatal("should fail when deleting non-existent branch")
+	}
+
+	// Verify error message
+	if !strings.Contains(out, "no worktree or branch found") {
+		t.Errorf("error should mention 'no worktree or branch found', got: %s", out)
+	}
+}
+
 // TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.
 func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 	// PowerShell init script uses git.exe which is Windows-specific
