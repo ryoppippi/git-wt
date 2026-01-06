@@ -448,6 +448,20 @@ func listWorktrees(ctx context.Context) error {
 }
 
 func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
+	// Get main repo root before any deletion (needed for running git commands after worktree removal)
+	mainRoot, err := git.MainRepoRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get main repository root: %w", err)
+	}
+
+	// Check if current directory is one of the worktrees being deleted
+	currentWt, err := git.CurrentWorktree(ctx)
+	if err != nil {
+		currentWt = "" // Not in a worktree, continue
+	}
+
+	var needCdToMain bool
+
 	for _, branch := range branches {
 		// Find worktree by branch or directory name
 		wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
@@ -457,6 +471,23 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 
 		// Case 1: Worktree exists - remove worktree and optionally branch
 		if wt != nil {
+			// Check if we're deleting the current worktree
+			if currentWt != "" && wt.Path == currentWt {
+				needCdToMain = true
+			}
+
+			// Get worktree directory name before removal
+			wtDir, err := git.WorktreeDirName(ctx, wt)
+			if err != nil {
+				return fmt.Errorf("failed to get worktree directory name: %w", err)
+			}
+
+			// Check branch existence before removal
+			branchExists, err := git.LocalBranchExists(ctx, wt.Branch)
+			if err != nil {
+				return fmt.Errorf("failed to check branch existence: %w", err)
+			}
+
 			// Remove worktree
 			if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
 				return fmt.Errorf("failed to remove worktree: %w", err)
@@ -464,18 +495,9 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 
 			// Delete branch (only if it exists as a local branch)
 			// Let git branch -d/-D handle the merge check
-			exists, err := git.LocalBranchExists(ctx, wt.Branch)
-			if err != nil {
-				return fmt.Errorf("failed to check branch existence: %w", err)
-			}
-
-			wtDir, err := git.WorktreeDirName(ctx, wt)
-			if err != nil {
-				return fmt.Errorf("failed to get worktree directory name: %w", err)
-			}
-
-			if exists {
-				if err := git.DeleteBranch(ctx, wt.Branch, force); err != nil {
+			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists
+			if branchExists {
+				if err := git.DeleteBranchInDir(ctx, wt.Branch, force, mainRoot); err != nil {
 					return fmt.Errorf("failed to delete branch (use -D to force): %w", err)
 				}
 				if wtDir == wt.Branch {
@@ -504,6 +526,13 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 		}
 		fmt.Printf("Deleted branch %q (no worktree was associated)\n", branch)
 	}
+
+	// If we deleted the current worktree, print main repo path for shell integration to cd
+	// Only output if shell integration is active (GIT_WT_SHELL_INTEGRATION=1)
+	if needCdToMain && os.Getenv("GIT_WT_SHELL_INTEGRATION") == "1" {
+		fmt.Println(mainRoot)
+	}
+
 	return nil
 }
 

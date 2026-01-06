@@ -1958,6 +1958,238 @@ func TestE2E_DeleteBranchOnly_NotExists(t *testing.T) {
 	}
 }
 
+// TestE2E_DeleteCurrentWorktree tests deleting the worktree you're currently in.
+// This tests the fix for issue #58: safely remove current worktree and return to repository root.
+func TestE2E_DeleteCurrentWorktree(t *testing.T) {
+	binPath := buildBinary(t)
+
+	t.Run("delete_current_worktree_outputs_main_repo_path_with_shell_integration", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree
+		out, err := runGitWt(t, binPath, repo.Root, "current-wt")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Delete worktree from WITHIN the worktree itself with GIT_WT_SHELL_INTEGRATION=1
+		cmd := exec.Command(binPath, "-D", "current-wt")
+		cmd.Dir = wtPath
+		cmd.Env = append(os.Environ(), "GIT_WT_SHELL_INTEGRATION=1")
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -D failed: %v\nstderr: %s", err, stderrBuf.String())
+		}
+		stdout := strings.TrimSpace(stdoutBuf.String())
+
+		// stdout should contain the main repo path as the last line (for shell integration to cd)
+		lines := strings.Split(stdout, "\n")
+		lastLine := lines[len(lines)-1]
+
+		if lastLine != repo.Root {
+			t.Errorf("last line should be main repo path %q, got %q", repo.Root, lastLine)
+		}
+
+		// Verify worktree was deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted")
+		}
+	})
+
+	t.Run("delete_current_worktree_no_path_without_shell_integration", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree
+		out, err := runGitWt(t, binPath, repo.Root, "current-wt-no-shell")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Delete worktree WITHOUT GIT_WT_SHELL_INTEGRATION (direct call)
+		stdout, stderr, err := runGitWtStdout(t, binPath, wtPath, "-D", "current-wt-no-shell")
+		if err != nil {
+			t.Fatalf("git-wt -D failed: %v\nstderr: %s", err, stderr)
+		}
+
+		// stdout should NOT contain the main repo path (no shell integration)
+		lines := strings.Split(strings.TrimSpace(stdout), "\n")
+		lastLine := lines[len(lines)-1]
+
+		// Last line should be the deletion message, not a directory path
+		if _, err := os.Stat(lastLine); err == nil {
+			t.Errorf("last line should NOT be a valid path without shell integration, got %q", lastLine)
+		}
+
+		// Verify worktree was deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted")
+		}
+	})
+
+	t.Run("delete_other_worktree_does_not_output_path", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create two worktrees
+		_, err := runGitWt(t, binPath, repo.Root, "wt-a")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-a: %v", err)
+		}
+		outB, err := runGitWt(t, binPath, repo.Root, "wt-b")
+		if err != nil {
+			t.Fatalf("failed to create worktree wt-b: %v", err)
+		}
+		wtPathB := worktreePath(outB)
+
+		// Delete wt-a from wt-b (not deleting current worktree)
+		stdout, stderr, err := runGitWtStdout(t, binPath, wtPathB, "-D", "wt-a")
+		if err != nil {
+			t.Fatalf("git-wt -D failed: %v\nstderr: %s", err, stderr)
+		}
+
+		// stdout should NOT contain a directory path (since we're not deleting current worktree)
+		lines := strings.Split(strings.TrimSpace(stdout), "\n")
+		lastLine := lines[len(lines)-1]
+
+		// Last line should be the deletion message, not a path
+		if _, err := os.Stat(lastLine); err == nil {
+			t.Errorf("last line should NOT be a valid path when deleting other worktree, got %q", lastLine)
+		}
+	})
+
+	t.Run("delete_current_worktree_safe_delete_with_shell_integration", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree
+		out, err := runGitWt(t, binPath, repo.Root, "safe-del-wt")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Delete worktree using -d (safe delete) from within the worktree with GIT_WT_SHELL_INTEGRATION=1
+		cmd := exec.Command(binPath, "-d", "safe-del-wt")
+		cmd.Dir = wtPath
+		cmd.Env = append(os.Environ(), "GIT_WT_SHELL_INTEGRATION=1")
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git-wt -d failed: %v\nstderr: %s", err, stderrBuf.String())
+		}
+		stdout := strings.TrimSpace(stdoutBuf.String())
+
+		// stdout should contain the main repo path as the last line
+		lines := strings.Split(stdout, "\n")
+		lastLine := lines[len(lines)-1]
+
+		if lastLine != repo.Root {
+			t.Errorf("last line should be main repo path %q, got %q", repo.Root, lastLine)
+		}
+	})
+}
+
+// TestE2E_DeleteCurrentWorktree_ShellIntegration tests shell integration for deleting current worktree.
+func TestE2E_DeleteCurrentWorktree_ShellIntegration(t *testing.T) {
+	binPath := buildBinary(t)
+
+	tests := []struct {
+		name       string
+		shell      string
+		scriptFunc func(repoRoot, wtPath, pathDir, branchName string) string
+	}{
+		{
+			name:  "bash",
+			shell: "bash",
+			scriptFunc: func(repoRoot, wtPath, pathDir, branchName string) string {
+				return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init bash)"
+cd %q
+git wt -D %s
+pwd
+`, pathDir, wtPath, branchName)
+			},
+		},
+		{
+			name:  "zsh",
+			shell: "zsh",
+			scriptFunc: func(repoRoot, wtPath, pathDir, branchName string) string {
+				return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init zsh)"
+cd %q
+git wt -D %s
+pwd
+`, pathDir, wtPath, branchName)
+			},
+		},
+		{
+			name:  "fish",
+			shell: "fish",
+			scriptFunc: func(repoRoot, wtPath, pathDir, branchName string) string {
+				return fmt.Sprintf(`
+set -x PATH %s $PATH
+git wt --init fish | source
+cd %q
+git wt -D %s
+pwd
+`, pathDir, wtPath, branchName)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tt.shell); err != nil {
+				t.Skipf("%s not available", tt.shell)
+			}
+
+			repo := testutil.NewTestRepo(t)
+			repo.CreateFile("README.md", "# Test")
+			repo.Commit("initial commit")
+
+			branchName := fmt.Sprintf("del-%s-test", tt.shell)
+
+			// Create worktree
+			out, err := runGitWt(t, binPath, repo.Root, branchName)
+			if err != nil {
+				t.Fatalf("failed to create worktree: %v", err)
+			}
+			wtPath := worktreePath(out)
+
+			script := tt.scriptFunc(repo.Root, wtPath, filepath.Dir(binPath), branchName)
+			cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
+			cmdOut, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%s shell integration failed: %v\noutput: %s", tt.shell, err, cmdOut)
+			}
+
+			output := strings.TrimSpace(string(cmdOut))
+			lines := strings.Split(output, "\n")
+			pwd := lines[len(lines)-1]
+
+			// After deleting current worktree, pwd should be main repo root
+			if pwd != repo.Root {
+				t.Errorf("pwd should be main repo root %q after deleting current worktree, got: %s", repo.Root, pwd)
+			}
+		})
+	}
+}
+
 // TestE2E_ShellIntegration_PowerShell tests the actual shell integration with PowerShell.
 func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 	// PowerShell init script uses git.exe which is Windows-specific

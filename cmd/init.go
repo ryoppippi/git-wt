@@ -25,7 +25,7 @@ git() {
             args+=("$arg")
         done
         local result
-        result=$(command git wt "${args[@]}")
+        result=$(GIT_WT_SHELL_INTEGRATION=1 command git wt "${args[@]}")
         local exit_code=$?
         # Get the last line for cd target
         local last_line
@@ -85,7 +85,7 @@ git() {
             args+=("$arg")
         done
         local result
-        result=$(command git wt "${args[@]}")
+        result=$(GIT_WT_SHELL_INTEGRATION=1 command git wt "${args[@]}")
         local exit_code=$?
         # Get the last line for cd target
         local last_line
@@ -163,6 +163,7 @@ function git --wraps git
                 break
             end
         end
+        set -lx GIT_WT_SHELL_INTEGRATION 1
         set -l result (command git wt $argv[2..])
         set -l exit_code $status
         # Get the last line for cd target
@@ -221,7 +222,9 @@ const powershellGitWrapper = "" +
 	"                $noSwitch = $true\n" +
 	"            }\n" +
 	"        }\n" +
+	"        $env:GIT_WT_SHELL_INTEGRATION = \"1\"\n" +
 	"        $result = & git.exe wt @wtArgs 2>&1\n" +
+	"        $env:GIT_WT_SHELL_INTEGRATION = $null\n" +
 	"        # Get the last line for cd target\n" +
 	"        $lines = @($result -split \"`n\" | Where-Object { $_ -ne \"\" })\n" +
 	"        $lastLine = $lines[-1]\n" +
