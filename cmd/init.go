@@ -57,8 +57,12 @@ _git_wt() {
     local cur prev words cword
     _get_comp_words_by_ref -n =: cur prev words cword 2>/dev/null || {
         cur="${COMP_WORDS[COMP_CWORD]}"
+        words=("${COMP_WORDS[@]}")
+        cword=$COMP_CWORD
     }
-    __gitcomp_nl "$(command git-wt __complete "$cur" 2>/dev/null | grep -v '^:' | grep -v '^-[^-]' | cut -f1)"
+    # Pass all arguments after 'git wt' to __complete
+    local args=("${words[@]:2}")
+    __gitcomp_nl "$(command git-wt __complete "${args[@]}" 2>/dev/null | grep -v '^:' | grep -v '^-[^-]' | cut -f1)"
 }
 `
 
@@ -110,6 +114,8 @@ const zshCompletion = `
 # git wt <branch> completion for zsh with descriptions
 _git-wt() {
     local -a completions
+    # Pass all previous arguments plus current word to __complete
+    local args=("${words[@]:1}")
     while IFS=$'\t' read -r comp desc; do
         [[ "$comp" == :* ]] && continue
         if [[ -n "$desc" ]]; then
@@ -117,7 +123,7 @@ _git-wt() {
         else
             completions+=("${comp}")
         fi
-    done < <(command git-wt __complete "${words[CURRENT]}" 2>/dev/null)
+    done < <(command git-wt __complete "${args[@]}" 2>/dev/null)
     _describe 'git-wt' completions
 }
 
@@ -186,8 +192,11 @@ end
 const fishCompletion = `
 # git wt <branch> completion for fish
 function __fish_git_wt_completions
+    set -l cmd (commandline -opc)
+    # Pass all arguments after 'git wt' to __complete
+    set -l args $cmd[3..]
     set -l cur (commandline -ct)
-    command git-wt __complete "$cur" 2>/dev/null | string match -rv '^:'
+    command git-wt __complete $args "$cur" 2>/dev/null | string match -rv '^:'
 end
 
 function __fish_git_wt_needs_completion
@@ -242,7 +251,9 @@ $scriptBlock = {
     param($wordToComplete, $commandAst, $cursorPosition)
     $tokens = $commandAst.ToString() -split '\s+'
     if ($tokens.Count -ge 2 -and $tokens[1] -eq "wt") {
-        $completions = & git-wt.exe __complete $wordToComplete 2>$null | Where-Object { $_ -notmatch '^:' }
+        # Pass all arguments after 'git wt' to __complete
+        $args = @($tokens[2..($tokens.Count-1)])
+        $completions = & git-wt.exe __complete @args 2>$null | Where-Object { $_ -notmatch '^:' }
         $completions | ForEach-Object {
             $parts = $_ -split [char]9, 2
             $completion = $parts[0]
