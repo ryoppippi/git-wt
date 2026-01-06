@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.9.1](https://github.com/k1LoW/git-wt/compare/v0.9.0...v0.9.1) - 2026-01-06
+### Fix bug 🐛
+- fix: use string match instead of test in fish shell hook to avoid errors with short options by @k1LoW in https://github.com/k1LoW/git-wt/pull/50
+
 ## [v0.9.0](https://github.com/k1LoW/git-wt/compare/v0.8.2...v0.9.0) - 2026-01-05
 ### New Features 🎉
 - feat: support creating and deleting multiple worktrees at once by @k1LoW in https://github.com/k1LoW/git-wt/pull/47
