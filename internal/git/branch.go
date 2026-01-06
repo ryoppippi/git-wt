@@ -55,11 +55,22 @@ func CreateBranch(ctx context.Context, name string) error {
 // DeleteBranch deletes a branch.
 // If force is true, it uses -D (force delete), otherwise -d (safe delete).
 func DeleteBranch(ctx context.Context, name string, force bool) error {
+	return DeleteBranchInDir(ctx, name, force, "")
+}
+
+// DeleteBranchInDir deletes a branch from a specific directory.
+// If dir is empty, uses current directory.
+func DeleteBranchInDir(ctx context.Context, name string, force bool, dir string) error {
 	flag := "-d"
 	if force {
 		flag = "-D"
 	}
-	cmd, err := gitCommand(ctx, "branch", flag, name)
+	var args []string
+	if dir != "" {
+		args = append(args, "-C", dir)
+	}
+	args = append(args, "branch", flag, name)
+	cmd, err := gitCommand(ctx, args...)
 	if err != nil {
 		return err
 	}
