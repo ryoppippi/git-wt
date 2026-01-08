@@ -502,12 +502,18 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists
 			if branchExists {
 				if err := git.DeleteBranchInDir(ctx, wt.Branch, force, mainRoot); err != nil {
-					return fmt.Errorf("failed to delete branch (use -D to force): %w", err)
-				}
-				if wtDir == wt.Branch {
-					fmt.Printf("Deleted worktree and branch %q\n", wt.Branch)
+					// Treat as non-fatal since worktree removal succeeded
+					if wtDir == wt.Branch {
+						fmt.Printf("Deleted worktree, but failed to delete branch %q (use -D to force)\n", wt.Branch)
+					} else {
+						fmt.Printf("Deleted worktree %q, but failed to delete branch %q (use -D to force)\n", wtDir, wt.Branch)
+					}
 				} else {
-					fmt.Printf("Deleted worktree %q and branch %q\n", wtDir, wt.Branch)
+					if wtDir == wt.Branch {
+						fmt.Printf("Deleted worktree and branch %q\n", wt.Branch)
+					} else {
+						fmt.Printf("Deleted worktree %q and branch %q\n", wtDir, wt.Branch)
+					}
 				}
 			} else {
 				fmt.Printf("Deleted worktree %q (branch %q did not exist locally)\n", wtDir, wt.Branch)
