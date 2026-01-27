@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.16.1](https://github.com/k1LoW/git-wt/compare/v0.16.0...v0.16.1) - 2026-01-27
+### Breaking Changes 🛠
+- fix: exclude `basedir` from file copying to prevent circular copying by @k1LoW in https://github.com/k1LoW/git-wt/pull/92
+
 ## [v0.16.0](https://github.com/k1LoW/git-wt/compare/v0.15.1...v0.16.0) - 2026-01-27
 ### New Features 🎉
 - perf: optimize file copy with clonefile on macOS by @k1LoW in https://github.com/k1LoW/git-wt/pull/90
