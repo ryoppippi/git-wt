@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.16.0](https://github.com/k1LoW/git-wt/compare/v0.15.1...v0.16.0) - 2026-01-27
+### New Features 🎉
+- perf: optimize file copy with clonefile on macOS by @k1LoW in https://github.com/k1LoW/git-wt/pull/90
+
 ## [v0.15.1](https://github.com/k1LoW/git-wt/compare/v0.15.0...v0.15.1) - 2026-01-26
 ### Fix bug 🐛
 - fix: disable Cobra's default completion subcommand to avoid confusion by @k1LoW in https://github.com/k1LoW/git-wt/pull/89
