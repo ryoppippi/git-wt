@@ -170,6 +170,9 @@ This is useful when you want to copy specific IDE files (like VS Code workspace 
 > [!NOTE]
 > If the same file matches both `wt.copy` and `wt.nocopy`, `wt.nocopy` takes precedence.
 
+> [!NOTE]
+> The worktree base directory (`wt.basedir`) is always excluded from file copying, regardless of copy options. This prevents circular copying when basedir is inside the repository (e.g., `.worktrees/`).
+
 #### `wt.hook` / `--hook`
 
 Commands to run after creating a new worktree. Hooks run in the new worktree directory.

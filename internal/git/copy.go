@@ -15,6 +15,7 @@ type CopyOptions struct {
 	CopyModified  bool
 	NoCopy        []string
 	Copy          []string
+	ExcludeDirs   []string // Directories to exclude from copying (absolute paths)
 }
 
 // CopyFilesToWorktree copies files to the new worktree based on options.
@@ -73,6 +74,21 @@ func CopyFilesToWorktree(ctx context.Context, srcRoot, dstRoot string, opts Copy
 		}
 		seen[file] = struct{}{}
 
+		// Skip files inside ExcludeDirs
+		src := filepath.Join(srcRoot, file)
+		shouldSkip := false
+		for _, excludeDir := range opts.ExcludeDirs {
+			// Check if src is inside excludeDir
+			rel, err := filepath.Rel(excludeDir, src)
+			if err == nil && !strings.HasPrefix(rel, "..") {
+				shouldSkip = true
+				break
+			}
+		}
+		if shouldSkip {
+			continue
+		}
+
 		// Skip files matching NoCopy patterns
 		if noCopyMatcher != nil {
 			// Split file path into components for gitignore matching
@@ -83,7 +99,6 @@ func CopyFilesToWorktree(ctx context.Context, srcRoot, dstRoot string, opts Copy
 			}
 		}
 
-		src := filepath.Join(srcRoot, file)
 		dst := filepath.Join(dstRoot, file)
 
 		if err := copyFile(src, dst); err != nil {

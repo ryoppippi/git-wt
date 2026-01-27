@@ -483,3 +483,51 @@ func TestCopyFilesToWorktree_Copy_WithCopyIgnored(t *testing.T) {
 		t.Error(".env should have been copied")
 	}
 }
+
+func TestCopyFilesToWorktree_ExcludeDirs(t *testing.T) {
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.CreateFile(".gitignore", ".env\n.worktrees/\n")
+	repo.Commit("initial commit")
+
+	// Create ignored files
+	repo.CreateFile(".env", "SECRET=value")
+	// Create files in the directory that should be excluded (simulating worktrees basedir)
+	repo.CreateFile(".worktrees/existing-wt/README.md", "# Existing worktree")
+	repo.CreateFile(".worktrees/existing-wt/.env", "WT_SECRET=value")
+	repo.CreateFile(".worktrees/.gitignore", "*\n")
+
+	dstDir := filepath.Join(repo.ParentDir(), "dst")
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		t.Fatalf("failed to create dst dir: %v", err)
+	}
+
+	restore := repo.Chdir()
+	defer restore()
+
+	// Copy ignored files but exclude .worktrees directory
+	opts := CopyOptions{
+		CopyIgnored: true,
+		ExcludeDirs: []string{filepath.Join(repo.Root, ".worktrees")},
+	}
+	err := CopyFilesToWorktree(t.Context(), repo.Root, dstDir, opts)
+	if err != nil {
+		t.Fatalf("CopyFilesToWorktree failed: %v", err)
+	}
+
+	// .env should be copied (not in ExcludeDirs)
+	if _, err := os.Stat(filepath.Join(dstDir, ".env")); os.IsNotExist(err) {
+		t.Error(".env should have been copied")
+	}
+
+	// Files inside .worktrees should NOT be copied (in ExcludeDirs)
+	if _, err := os.Stat(filepath.Join(dstDir, ".worktrees/existing-wt/README.md")); !os.IsNotExist(err) {
+		t.Error(".worktrees/existing-wt/README.md should NOT have been copied")
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, ".worktrees/existing-wt/.env")); !os.IsNotExist(err) {
+		t.Error(".worktrees/existing-wt/.env should NOT have been copied")
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, ".worktrees/.gitignore")); !os.IsNotExist(err) {
+		t.Error(".worktrees/.gitignore should NOT have been copied")
+	}
+}

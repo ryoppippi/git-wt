@@ -221,6 +221,61 @@ func TestE2E_CopyOptions(t *testing.T) {
 			t.Error(".env SHOULD have been copied with --copyignored flag")
 		}
 	})
+
+	t.Run("copyignored_excludes_basedir", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.CreateFile(".gitignore", ".env\n.worktrees/\n")
+		repo.Commit("initial commit")
+
+		// Set basedir inside the repo (which is gitignored)
+		basedir := filepath.Join(repo.Root, ".worktrees")
+		repo.Git("config", "wt.basedir", basedir)
+		repo.Git("config", "wt.copyignored", "true")
+
+		// Create ignored file
+		repo.CreateFile(".env", "SECRET=basedir-test")
+
+		// Create first worktree
+		out1, err := runGitWt(t, binPath, repo.Root, "first-wt")
+		if err != nil {
+			t.Fatalf("failed to create first worktree: %v\noutput: %s", err, out1)
+		}
+		wtPath1 := worktreePath(out1)
+
+		// Verify .env was copied to first worktree
+		envPath1 := filepath.Join(wtPath1, ".env")
+		if _, err := os.Stat(envPath1); os.IsNotExist(err) {
+			t.Error(".env should have been copied to first worktree")
+		}
+
+		// Create second worktree - it should NOT copy files from first worktree
+		out2, err := runGitWt(t, binPath, repo.Root, "second-wt")
+		if err != nil {
+			t.Fatalf("failed to create second worktree: %v\noutput: %s", err, out2)
+		}
+		wtPath2 := worktreePath(out2)
+
+		// Verify .env was copied to second worktree
+		envPath2 := filepath.Join(wtPath2, ".env")
+		if _, err := os.Stat(envPath2); os.IsNotExist(err) {
+			t.Error(".env should have been copied to second worktree")
+		}
+
+		// Verify files from first worktree were NOT copied to second worktree
+		// (basedir should be excluded from copyignored)
+		firstWtReadme := filepath.Join(wtPath2, "first-wt/README.md")
+		if _, err := os.Stat(firstWtReadme); !os.IsNotExist(err) {
+			t.Error("files from first worktree should NOT have been copied to second worktree (basedir should be excluded)")
+		}
+
+		// Also check that .worktrees/.gitignore was not copied
+		basedirGitignore := filepath.Join(wtPath2, ".worktrees/.gitignore")
+		if _, err := os.Stat(basedirGitignore); !os.IsNotExist(err) {
+			t.Error(".worktrees/.gitignore should NOT have been copied (basedir should be excluded)")
+		}
+	})
 }
 
 func TestE2E_Basedir(t *testing.T) {
