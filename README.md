@@ -98,6 +98,13 @@ Supported template variables:
 
 Default: `.wt`
 
+> [!NOTE]
+> When placing worktrees inside the repository (e.g., `.wt`), be aware of these limitations:
+> - **Configuration files loaded multiple times**: Tools that traverse parent directories (e.g., Claude Code reading `CLAUDE.md`) may load configuration files from both the worktree and the main repository.
+> - **Linters/formatters scanning worktree directories**: Some tools may scan worktree directories, causing slower performance or unexpected results.
+>
+> Placing worktrees inside the `.git` directory (e.g., `.git/wt`) resolves these issues, as most tools ignore `.git`.
+
 #### `wt.copyignored` / `--copyignored`
 
 Copy files ignored by `.gitignore` (e.g., `.env`) to new worktrees.
