@@ -96,7 +96,7 @@ $ git wt --basedir="/tmp/worktrees" feature-branch
 Supported template variables:
 - `{gitroot}`: repository root directory name
 
-Default: `../{gitroot}-wt`
+Default: `.wt`
 
 #### `wt.copyignored` / `--copyignored`
 

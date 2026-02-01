@@ -104,7 +104,7 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return cfg, err
 	}
 	if len(baseDir) == 0 {
-		cfg.BaseDir = "../{gitroot}-wt"
+		cfg.BaseDir = ".wt"
 	} else {
 		cfg.BaseDir = baseDir[len(baseDir)-1]
 	}
@@ -219,6 +219,24 @@ func ExpandBaseDir(ctx context.Context, baseDir string) (string, error) {
 	}
 
 	return expanded, nil
+}
+
+// IsBaseDirConfigured checks if wt.basedir is explicitly configured in git config.
+func IsBaseDirConfigured(ctx context.Context) (bool, error) {
+	baseDir, err := GitConfig(ctx, configKeyBaseDir)
+	if err != nil {
+		return false, err
+	}
+	return len(baseDir) > 0, nil
+}
+
+// SetConfig sets a git config value.
+func SetConfig(ctx context.Context, key, value string) error {
+	cmd, err := gitCommand(ctx, "config", key, value)
+	if err != nil {
+		return err
+	}
+	return cmd.Run()
 }
 
 // WorktreePathFor returns the full path for a worktree given a base directory pattern and branch name.

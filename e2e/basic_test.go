@@ -515,3 +515,125 @@ func TestE2E_CLI(t *testing.T) {
 		}
 	})
 }
+
+func TestE2E_LegacyBaseDirMigration(t *testing.T) {
+	t.Parallel()
+	binPath := buildBinary(t)
+
+	t.Run("no_legacy_dir_uses_new_default", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, _, err := runGitWtWithStderr(t, binPath, repo.Root, "feature")
+		if err != nil {
+			t.Fatalf("git-wt failed: %v\noutput: %s", err, out)
+		}
+
+		wtPath := worktreePath(out)
+		expectedPath := filepath.Join(repo.Root, ".wt", "feature")
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+	})
+
+	t.Run("legacy_dir_exists_non_interactive_warns", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		legacyDir := filepath.Join(repo.Root, "..", "repo-wt")
+		if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+			t.Fatalf("failed to create legacy dir: %v", err)
+		}
+
+		out, stderr, err := runGitWtWithStderr(t, binPath, repo.Root, "feature")
+		if err != nil {
+			t.Fatalf("git-wt failed: %v\noutput: %s\nstderr: %s", err, out, stderr)
+		}
+
+		if !strings.Contains(stderr, "Warning:") {
+			t.Errorf("expected warning on stderr, got: %s", stderr)
+		}
+		if !strings.Contains(stderr, "wt.basedir has changed") {
+			t.Errorf("expected migration message on stderr, got: %s", stderr)
+		}
+
+		wtPath := worktreePath(out)
+		expectedPath := filepath.Join(repo.Root, ".wt", "feature")
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+	})
+
+	t.Run("explicit_config_no_migration", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		repo.Git("config", "wt.basedir", "../custom-wt")
+
+		legacyDir := filepath.Join(repo.Root, "..", "repo-wt")
+		if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+			t.Fatalf("failed to create legacy dir: %v", err)
+		}
+
+		out, stderr, err := runGitWtWithStderr(t, binPath, repo.Root, "feature")
+		if err != nil {
+			t.Fatalf("git-wt failed: %v\noutput: %s\nstderr: %s", err, out, stderr)
+		}
+
+		if strings.Contains(stderr, "Warning:") && strings.Contains(stderr, "wt.basedir has changed") {
+			t.Errorf("should not show migration warning when config is explicitly set, got: %s", stderr)
+		}
+
+		wtPath := worktreePath(out)
+		expectedPath := filepath.Clean(filepath.Join(repo.Root, "../custom-wt/feature"))
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+	})
+
+	t.Run("basedir_flag_no_migration", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		legacyDir := filepath.Join(repo.Root, "..", "repo-wt")
+		if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+			t.Fatalf("failed to create legacy dir: %v", err)
+		}
+
+		out, stderr, err := runGitWtWithStderr(t, binPath, repo.Root, "--basedir=../flag-wt", "feature")
+		if err != nil {
+			t.Fatalf("git-wt failed: %v\noutput: %s\nstderr: %s", err, out, stderr)
+		}
+
+		if strings.Contains(stderr, "Warning:") && strings.Contains(stderr, "wt.basedir has changed") {
+			t.Errorf("should not show migration warning when --basedir flag is used, got: %s", stderr)
+		}
+
+		wtPath := worktreePath(out)
+		expectedPath := filepath.Clean(filepath.Join(repo.Root, "../flag-wt/feature"))
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+	})
+}
+
+// runGitWtWithStderr runs git-wt and returns stdout, stderr, and error separately.
+func runGitWtWithStderr(t *testing.T, binPath, dir string, args ...string) (string, string, error) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), binPath, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir())
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
+}

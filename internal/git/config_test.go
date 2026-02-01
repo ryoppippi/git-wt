@@ -346,3 +346,61 @@ func TestExpandBaseDir(t *testing.T) {
 		})
 	}
 }
+
+func TestIsBaseDirConfigured(t *testing.T) {
+	t.Run("not configured", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		t.Cleanup(repo.Chdir())
+		t.Setenv("HOME", t.TempDir())
+
+		configured, err := IsBaseDirConfigured(t.Context())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if configured {
+			t.Error("IsBaseDirConfigured() = true, want false")
+		}
+	})
+
+	t.Run("configured", func(t *testing.T) {
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+		repo.Git("config", "wt.basedir", "../custom-wt")
+
+		t.Cleanup(repo.Chdir())
+		t.Setenv("HOME", t.TempDir())
+
+		configured, err := IsBaseDirConfigured(t.Context())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !configured {
+			t.Error("IsBaseDirConfigured() = false, want true")
+		}
+	})
+}
+
+func TestSetConfig(t *testing.T) {
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	t.Cleanup(repo.Chdir())
+	t.Setenv("HOME", t.TempDir())
+
+	if err := SetConfig(t.Context(), "wt.basedir", "../test-wt"); err != nil {
+		t.Fatalf("SetConfig() error = %v", err)
+	}
+
+	values, err := GitConfig(t.Context(), "wt.basedir")
+	if err != nil {
+		t.Fatalf("GitConfig() error = %v", err)
+	}
+	if len(values) != 1 || values[0] != "../test-wt" {
+		t.Errorf("GitConfig() = %v, want [../test-wt]", values) //nostyle:errorstrings
+	}
+}
