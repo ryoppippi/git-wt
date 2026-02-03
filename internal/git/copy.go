@@ -31,7 +31,7 @@ func CopyFilesToWorktree(ctx context.Context, srcRoot, dstRoot string, opts Copy
 	}
 
 	if opts.CopyUntracked {
-		untracked, err := listUntrackedFiles(ctx, srcRoot)
+		untracked, err := ListUntrackedFiles(ctx, srcRoot)
 		if err != nil {
 			return err
 		}
@@ -124,8 +124,8 @@ func listIgnoredFiles(ctx context.Context, root string) ([]string, error) {
 	return parseFileList(string(out)), nil
 }
 
-// listUntrackedFiles returns untracked files (not ignored).
-func listUntrackedFiles(ctx context.Context, root string) ([]string, error) {
+// ListUntrackedFiles returns untracked files (not ignored).
+func ListUntrackedFiles(ctx context.Context, root string) ([]string, error) {
 	cmd, err := gitCommand(ctx, "ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
