@@ -490,7 +490,7 @@ func TestCopyFile_PreservesTimestamps(t *testing.T) {
 	srcPath := filepath.Join(tmpDir, "src.txt")
 	dstPath := filepath.Join(tmpDir, "dst.txt")
 
-	if err := os.WriteFile(srcPath, []byte("content"), 0644); err != nil {
+	if err := os.WriteFile(srcPath, []byte("content"), 0600); err != nil {
 		t.Fatalf("failed to create source file: %v", err)
 	}
 
