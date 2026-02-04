@@ -83,6 +83,100 @@ func TestE2E_DeleteWorktree(t *testing.T) {
 		}
 	})
 
+	t.Run("safe_delete_with_untracked_files", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "untracked-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Add an untracked file (not staged or committed)
+		if err := os.WriteFile(filepath.Join(wtPath, "untracked.txt"), []byte("content"), 0600); err != nil {
+			t.Fatalf("failed to create untracked file: %v", err)
+		}
+
+		// Safe delete should fail with our custom message
+		out, err = runGitWt(t, binPath, repo.Root, "-d", "untracked-test")
+		if err == nil {
+			t.Fatal("git-wt -d should fail when worktree has untracked files")
+		}
+
+		if !strings.Contains(out, "has untracked files") {
+			t.Errorf("error should mention 'has untracked files', got: %s", out)
+		}
+		if !strings.Contains(out, "use -D to force deletion") {
+			t.Errorf("error should suggest 'use -D to force deletion', got: %s", out)
+		}
+
+		// Worktree should still exist
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Error("worktree should NOT have been deleted")
+		}
+
+		// Force delete should succeed
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "untracked-test")
+		if err != nil {
+			t.Fatalf("git-wt -D should succeed: %v\noutput: %s", err, out)
+		}
+
+		// Worktree should now be deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted with -D")
+		}
+	})
+
+	t.Run("safe_delete_with_modified_files", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "modified-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v", err)
+		}
+		wtPath := worktreePath(out)
+
+		// Modify a tracked file (README.md exists in the worktree)
+		if err := os.WriteFile(filepath.Join(wtPath, "README.md"), []byte("# Modified"), 0600); err != nil {
+			t.Fatalf("failed to modify file: %v", err)
+		}
+
+		// Safe delete should fail with our custom message
+		out, err = runGitWt(t, binPath, repo.Root, "-d", "modified-test")
+		if err == nil {
+			t.Fatal("git-wt -d should fail when worktree has modified files")
+		}
+
+		if !strings.Contains(out, "has modified files") {
+			t.Errorf("error should mention 'has modified files', got: %s", out)
+		}
+		if !strings.Contains(out, "use -D to force deletion") {
+			t.Errorf("error should suggest 'use -D to force deletion', got: %s", out)
+		}
+
+		// Worktree should still exist
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Error("worktree should NOT have been deleted")
+		}
+
+		// Force delete should succeed
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "modified-test")
+		if err != nil {
+			t.Fatalf("git-wt -D should succeed: %v\noutput: %s", err, out)
+		}
+
+		// Worktree should now be deleted
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree should have been deleted with -D")
+		}
+	})
+
 	// PR #64 fix: worktree deletion succeeds even when branch deletion fails
 	t.Run("with_unmerged_branch", func(t *testing.T) {
 		t.Parallel()
