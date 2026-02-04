@@ -39,7 +39,7 @@ func CopyFilesToWorktree(ctx context.Context, srcRoot, dstRoot string, opts Copy
 	}
 
 	if opts.CopyModified {
-		modified, err := listModifiedFiles(ctx, srcRoot)
+		modified, err := ListModifiedFiles(ctx, srcRoot)
 		if err != nil {
 			return err
 		}
@@ -138,8 +138,8 @@ func ListUntrackedFiles(ctx context.Context, root string) ([]string, error) {
 	return parseFileList(string(out)), nil
 }
 
-// listModifiedFiles returns tracked files with modifications.
-func listModifiedFiles(ctx context.Context, root string) ([]string, error) {
+// ListModifiedFiles returns tracked files with modifications.
+func ListModifiedFiles(ctx context.Context, root string) ([]string, error) {
 	cmd, err := gitCommand(ctx, "ls-files", "--modified")
 	if err != nil {
 		return nil, err

@@ -514,8 +514,16 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 				}
 			}
 
-			// Check for untracked files (only for safe delete)
+			// Check for modified or untracked files (only for safe delete)
 			if !force {
+				modifiedFiles, err := git.ListModifiedFiles(ctx, wt.Path)
+				if err != nil {
+					return fmt.Errorf("failed to check for modified files: %w", err)
+				}
+				if len(modifiedFiles) > 0 {
+					return fmt.Errorf("worktree %q has modified files, use -D to force deletion", branch)
+				}
+
 				untrackedFiles, err := git.ListUntrackedFiles(ctx, wt.Path)
 				if err != nil {
 					return fmt.Errorf("failed to check for untracked files: %w", err)
