@@ -795,6 +795,10 @@ pwd
 		}
 		wtPath := worktreePath(out)
 
+		if !filepath.IsAbs(wtPath) {
+			t.Fatalf("expected absolute path, got %q", wtPath)
+		}
+
 		// Delete using absolute path
 		cmd := exec.Command(binPath, "-D", wtPath)
 		cmd.Dir = repo.Root
@@ -811,48 +815,44 @@ pwd
 		}
 	})
 
-	t.Run("delete_worktree_name_takes_precedence_over_local_dir", func(t *testing.T) {
+	t.Run("delete_worktree_name_takes_precedence_over_filesystem_path", func(t *testing.T) {
 		t.Parallel()
 		repo := testutil.NewTestRepo(t)
 		repo.CreateFile("README.md", "# Test")
 		repo.Commit("initial commit")
 
-		// Create two worktrees
-		outA, err := runGitWt(t, binPath, repo.Root, "shadow-test")
+		// Create a worktree named "test"
+		out, err := runGitWt(t, binPath, repo.Root, "test")
 		if err != nil {
-			t.Fatalf("failed to create worktree shadow-test: %v", err)
+			t.Fatalf("failed to create worktree test: %v", err)
 		}
-		outB, err := runGitWt(t, binPath, repo.Root, "other-wt")
-		if err != nil {
-			t.Fatalf("failed to create worktree other-wt: %v", err)
-		}
-		wtPathA := worktreePath(outA)
-		wtPathB := worktreePath(outB)
+		wtPath := worktreePath(out)
 
-		// Create a local directory named "shadow-test" inside other-wt
-		localDir := filepath.Join(wtPathB, "shadow-test")
+		// Create a local directory named "test" inside the main repo
+		// This simulates: repo has a folder "test", and there's also a worktree "test"
+		localDir := filepath.Join(repo.Root, "test")
 		if err := os.Mkdir(localDir, 0755); err != nil {
 			t.Fatalf("failed to create local directory: %v", err)
 		}
 
-		// From other-wt, delete "shadow-test" - should delete the worktree, not be confused by local dir
-		cmd := exec.Command(binPath, "-D", "shadow-test")
-		cmd.Dir = wtPathB
+		// From main repo, delete "test" - should delete the worktree, not be confused by local dir
+		cmd := exec.Command(binPath, "-D", "test")
+		cmd.Dir = repo.Root
 		var stdoutBuf, stderrBuf bytes.Buffer
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
 		if err := cmd.Run(); err != nil {
-			t.Fatalf("git-wt -D shadow-test failed: %v\nstderr: %s", err, stderrBuf.String())
+			t.Fatalf("git-wt -D test failed: %v\nstderr: %s", err, stderrBuf.String())
 		}
 
-		// Verify worktree shadow-test was deleted
-		if _, err := os.Stat(wtPathA); !os.IsNotExist(err) {
-			t.Error("worktree shadow-test should have been deleted")
+		// Verify worktree was deleted (matched by name)
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree test should have been deleted")
 		}
 
 		// Verify local directory still exists (we deleted the worktree, not the local dir)
 		if _, err := os.Stat(localDir); os.IsNotExist(err) {
-			t.Error("local directory shadow-test should still exist")
+			t.Error("local directory test should still exist")
 		}
 	})
 }
