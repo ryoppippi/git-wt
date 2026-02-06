@@ -62,8 +62,8 @@ Examples:
   git wt                                    List all worktrees
   git wt <branch|worktree>                  Switch to worktree (create worktree/branch if needed)
   git wt <branch|worktree> <start-point>    Create worktree from start-point (e.g., origin/main)
-  git wt -d <branch|worktree>...            Delete worktree and branch (safe)
-  git wt -D <branch|worktree>...            Force delete worktree and branch
+  git wt -d <branch|worktree|path>...       Delete worktree and branch (safe)
+  git wt -D <branch|worktree|path>...       Force delete worktree and branch
 
 Note: The default branch (e.g., main, master) is protected from accidental deletion.
       - With worktree: worktree is deleted, but branch is preserved.
@@ -154,8 +154,8 @@ func init() {
 	// git-wt uses its own shell integration via --init flag instead.
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	rootCmd.Flags().BoolVarP(&deleteFlag, "delete", "d", false, "Delete worktree and branch (safe delete, only if merged)")
-	rootCmd.Flags().BoolVarP(&forceDeleteFlag, "force-delete", "D", false, "Force delete worktree and branch")
+	rootCmd.Flags().BoolVarP(&deleteFlag, "delete", "d", false, "Delete worktree and branch by name or path (safe delete, only if merged)")
+	rootCmd.Flags().BoolVarP(&forceDeleteFlag, "force-delete", "D", false, "Force delete worktree and branch by name or path")
 	rootCmd.Flags().StringVar(&initShell, "init", "", "Output shell initialization script (bash, zsh, fish, powershell)")
 	rootCmd.Flags().BoolVar(&nocd, "nocd", false, "Do not change directory to the worktree (also disables git() wrapper when used with --init)")
 	rootCmd.Flags().BoolVar(&nocd, "no-switch-directory", false, "")
