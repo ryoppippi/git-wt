@@ -264,13 +264,13 @@ You can use [fzf](https://github.com/junegunn/fzf) for interactive worktree sele
 #### bash/zsh
 
 ``` console
-$ cd $(git-wt | fzf | awk '{print $1}')
+$ cd $(git-wt | fzf --header-lines=1 | awk '{if ($1 == "*") print $2; else print $1}')
 ```
 
 #### fish
 
 ``` console
-$ cd (git-wt | fzf | awk '{print $1}')
+$ cd (git-wt | fzf --header-lines=1 | awk '{if ($1 == "*") print $2; else print $1}')
 ```
 
 ### tmux
