@@ -5,7 +5,8 @@ A Git subcommand that makes `git worktree` simple.
 ## Usage
 
 ``` console
-$ git wt                       # List all worktrees
+$ git wt                            # List all worktrees
+$ git wt --json                     # List all worktrees in JSON format
 $ git wt <branch|worktree|path>     # Switch to worktree (create worktree/branch if needed)
 $ git wt -d <branch|worktree|path>  # Delete worktree and branch (safe)
 $ git wt -D <branch|worktree|path>  # Force delete worktree and branch
@@ -272,6 +273,7 @@ $ cd $(git-wt | fzf --header-lines=1 | awk '{if ($1 == "*") print $2; else print
 ``` console
 $ cd (git-wt | fzf --header-lines=1 | awk '{if ($1 == "*") print $2; else print $1}')
 ```
+
 
 ### tmux
 
