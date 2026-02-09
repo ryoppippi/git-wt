@@ -50,6 +50,7 @@ var (
 	hookFlag           []string
 	allowDeleteDefault bool
 	relativeFlag       bool
+	jsonFlag           bool
 )
 
 var rootCmd = &cobra.Command{
@@ -179,6 +180,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
+	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
 }
 
 func runRoot(cmd *cobra.Command, args []string) error {
@@ -429,6 +431,10 @@ func listWorktrees(ctx context.Context) error {
 	currentPath, err := git.CurrentWorktree(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current worktree: %w", err)
+	}
+
+	if jsonFlag {
+		return printJSON(os.Stdout, worktrees, currentPath)
 	}
 
 	table := tablewriter.NewTable(os.Stdout,
