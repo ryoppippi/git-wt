@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,6 +99,79 @@ func TestE2E_ListWorktrees(t *testing.T) {
 		// Ensure they are on different lines (not all on the same line)
 		if mainLine == featureALine || mainLine == featureBLine || featureALine == featureBLine {
 			t.Errorf("each worktree should be on its own line, but found duplicates:\nmain: %q\nfeature-a: %q\nfeature-b: %q", mainLine, featureALine, featureBLine)
+		}
+	})
+
+	t.Run("json", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create a worktree
+		_, err := runGitWt(t, binPath, repo.Root, "feature-json")
+		if err != nil {
+			t.Fatalf("failed to create worktree feature-json: %v", err)
+		}
+
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "--json")
+		if err != nil {
+			t.Fatalf("git-wt --json failed: %v\nstderr: %s", err, stderr)
+		}
+
+		var items []struct {
+			Path    string `json:"path"`
+			Branch  string `json:"branch"`
+			Head    string `json:"head"`
+			Bare    bool   `json:"bare"`
+			Current bool   `json:"current"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &items); err != nil {
+			t.Fatalf("failed to parse JSON output: %v\noutput: %s", err, stdout)
+		}
+
+		if len(items) != 2 {
+			t.Fatalf("expected 2 worktrees, got %d", len(items))
+		}
+
+		// Find main and feature worktrees
+		var mainItem, featureItem *struct {
+			Path    string `json:"path"`
+			Branch  string `json:"branch"`
+			Head    string `json:"head"`
+			Bare    bool   `json:"bare"`
+			Current bool   `json:"current"`
+		}
+		for i := range items {
+			switch items[i].Branch {
+			case "main":
+				mainItem = &items[i]
+			case "feature-json":
+				featureItem = &items[i]
+			}
+		}
+
+		if mainItem == nil {
+			t.Fatal("expected to find main worktree in JSON output")
+		}
+		if featureItem == nil {
+			t.Fatal("expected to find feature-json worktree in JSON output")
+		}
+
+		if mainItem.Path != repo.Root {
+			t.Errorf("main worktree path = %q, want %q", mainItem.Path, repo.Root)
+		}
+		if !mainItem.Current {
+			t.Error("main worktree should be marked as current")
+		}
+		if featureItem.Current {
+			t.Error("feature-json worktree should not be marked as current")
+		}
+		if mainItem.Head == "" {
+			t.Error("main worktree head should not be empty")
+		}
+		if featureItem.Head == "" {
+			t.Error("feature-json worktree head should not be empty")
 		}
 	})
 
