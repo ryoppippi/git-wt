@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.20.1](https://github.com/k1LoW/git-wt/compare/v0.20.0...v0.20.1) - 2026-02-11
+### Other Changes
+- chore(deps): bump github.com/go-git/go-git/v5 from 5.16.4 to 5.16.5 by @dependabot[bot] in https://github.com/k1LoW/git-wt/pull/126
+- Fix test isolation from user's global git config by @usadamasa in https://github.com/k1LoW/git-wt/pull/129
+
 ## [v0.20.0](https://github.com/k1LoW/git-wt/compare/v0.19.1...v0.20.0) - 2026-02-09
 ### New Features 🎉
 - feat: add `--json` flag to output worktree list in JSON format by @k1LoW in https://github.com/k1LoW/git-wt/pull/124
