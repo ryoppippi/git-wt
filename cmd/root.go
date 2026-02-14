@@ -588,7 +588,8 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 
 			// Delete branch (only if it exists as a local branch)
 			// Let git branch -d/-D handle the merge check
-			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists
+			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists.
+			// needCdToMain stays true for subsequent iterations as well.
 			if branchExists {
 				dir := ""
 				if needCdToMain {
