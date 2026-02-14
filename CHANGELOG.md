@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.21.0](https://github.com/k1LoW/git-wt/compare/v0.20.0...v0.21.0) - 2026-02-14
+### New Features 🎉
+- feat: detect bare repositories and model 4-state RepoContext by @usadamasa in https://github.com/k1LoW/git-wt/pull/136
+### Other Changes
+- chore(deps): bump github.com/go-git/go-git/v5 from 5.16.4 to 5.16.5 by @dependabot[bot] in https://github.com/k1LoW/git-wt/pull/126
+- Fix test isolation from user's global git config by @usadamasa in https://github.com/k1LoW/git-wt/pull/129
+- chore(deps): bump golang.org/x/sys from 0.40.0 to 0.41.0 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/git-wt/pull/134
+- chore(deps): bump aquasecurity/trivy-action from 0.33.1 to 0.34.0 in the dependencies group by @dependabot[bot] in https://github.com/k1LoW/git-wt/pull/135
+
 ## [v0.20.0](https://github.com/k1LoW/git-wt/compare/v0.19.1...v0.20.0) - 2026-02-09
 ### New Features 🎉
 - feat: add `--json` flag to output worktree list in JSON format by @k1LoW in https://github.com/k1LoW/git-wt/pull/124
