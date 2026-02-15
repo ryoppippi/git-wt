@@ -58,59 +58,30 @@ var ErrBareRepository = errors.New(
 // DetectRepoContext detects whether the current repository is bare and whether
 // the current working directory is inside a linked worktree.
 //
-// Detection strategy:
+// Detection strategy uses `git rev-parse --git-dir --git-common-dir`:
 //
-// Bare detection uses `git worktree list --porcelain`. The first entry always
-// represents the main repository; if it has a "bare" line, the repo is bare.
-// This works regardless of whether the command is run from the bare root or
-// from a linked worktree. See IsBareRepository's original doc comment for the
-// detailed rationale of why rev-parse is insufficient.
+//   - Bare: filepath.Base(gitCommonDir) != ".git"
+//     In a normal repo, git-common-dir ends with ".git". In a bare repo,
+//     git-common-dir IS the repository directory (e.g., "repo.git" or any name).
+//   - Worktree: gitDir != gitCommonDir
+//     In the main working tree (or bare root), both are equal. In a linked
+//     worktree, gitDir points to a worktrees/X subdirectory.
 //
-// Worktree detection differs by repo type:
-//   - Bare: `git rev-parse --show-toplevel` fails in the bare root (no working
-//     tree) but succeeds inside a linked worktree. Success → Worktree=true.
-//   - Non-bare: `--show-toplevel` always succeeds. If the resolved path differs
-//     from worktrees[0].Path, we are in a linked worktree.
+// This approach works correctly across all four states (normal main, normal
+// worktree, bare root, bare worktree) with a single git process invocation.
 func DetectRepoContext(ctx context.Context) (RepoContext, error) {
 	if cached := RepoContextFrom(ctx); cached != nil {
 		return *cached, nil
 	}
 
-	worktrees, err := ListWorktrees(ctx)
+	gitDir, gitCommonDir, err := gitDirs(ctx)
 	if err != nil {
 		return RepoContext{}, err
 	}
 
-	rc := RepoContext{}
-	if len(worktrees) > 0 && worktrees[0].Bare {
-		rc.Bare = true
-	}
-
-	if rc.Bare {
-		// In a bare repo root, show-toplevel fails. In a linked worktree
-		// created from bare, it succeeds.
-		if _, err := RepoRoot(ctx); err == nil {
-			rc.Worktree = true
-		}
-	} else {
-		// For non-bare repos, compare current toplevel with main worktree path.
-		toplevel, err := RepoRoot(ctx)
-		if err != nil {
-			return RepoContext{}, err
-		}
-		if len(worktrees) > 0 {
-			mainPath, err := filepath.EvalSymlinks(worktrees[0].Path)
-			if err != nil {
-				mainPath = worktrees[0].Path
-			}
-			currentPath, err := filepath.EvalSymlinks(toplevel)
-			if err != nil {
-				currentPath = toplevel
-			}
-			if mainPath != currentPath {
-				rc.Worktree = true
-			}
-		}
+	rc := RepoContext{
+		Bare:     filepath.Base(gitCommonDir) != ".git",
+		Worktree: gitDir != gitCommonDir,
 	}
 
 	if cwd, err := os.Getwd(); err == nil {
@@ -148,6 +119,26 @@ func AssertNotBareRepository(ctx context.Context) error {
 	return nil
 }
 
+// gitDirs returns the git-dir and git-common-dir for the current repository.
+// Both paths are returned as absolute paths resolved by git.
+// git-dir points to the .git directory (or worktrees/X subdirectory for linked worktrees).
+// git-common-dir points to the shared .git directory of the main repository.
+func gitDirs(ctx context.Context) (gitDir, gitCommonDir string, err error) {
+	cmd, err := gitCommand(ctx, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+	if err != nil {
+		return "", "", err
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", "", err
+	}
+	lines := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)
+	if len(lines) != 2 {
+		return "", "", fmt.Errorf("unexpected output from git rev-parse: %q", string(out))
+	}
+	return lines[0], lines[1], nil
+}
+
 // ShowPrefix returns the path prefix of the current directory relative to the repository root.
 // It runs "git rev-parse --show-prefix" and strips the trailing slash.
 // Returns an empty string when at the repository root.
@@ -178,19 +169,19 @@ func RepoRoot(ctx context.Context) (string, error) {
 
 // MainRepoRoot returns the root directory of the main git repository.
 // Unlike RepoRoot, this returns the main repository root even when called from a worktree.
+//
+// For normal repositories, git-common-dir is ".git" inside the repo root,
+// so the parent directory is returned. For bare repositories, git-common-dir
+// IS the repository directory itself, so it is returned directly.
 func MainRepoRoot(ctx context.Context) (string, error) {
-	cmd, err := gitCommand(ctx, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	_, gitCommonDir, err := gitDirs(ctx)
 	if err != nil {
 		return "", err
 	}
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+	if filepath.Base(gitCommonDir) == ".git" {
+		return filepath.Dir(gitCommonDir), nil
 	}
-	gitCommonDir := strings.TrimSpace(string(out))
-
-	// The main repo root is the parent of the .git directory
-	return filepath.Dir(gitCommonDir), nil
+	return gitCommonDir, nil
 }
 
 // RepoName returns the name of the current git repository (directory name).

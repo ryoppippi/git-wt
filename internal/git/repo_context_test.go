@@ -430,6 +430,225 @@ func TestRepoName(t *testing.T) {
 	}
 }
 
+func TestGitDirs_NormalRepo(t *testing.T) {
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	restore := repo.Chdir()
+	defer restore()
+
+	gitDir, gitCommonDir, err := gitDirs(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Normal repo: both should point to .git, and they should be equal
+	if filepath.Base(gitDir) != ".git" {
+		t.Errorf("gitDir base should be .git, got %q", filepath.Base(gitDir))
+	}
+	if filepath.Base(gitCommonDir) != ".git" {
+		t.Errorf("gitCommonDir base should be .git, got %q", filepath.Base(gitCommonDir))
+	}
+	if gitDir != gitCommonDir {
+		t.Errorf("gitDir and gitCommonDir should be equal in normal repo\ngitDir:      %s\ngitCommonDir: %s", gitDir, gitCommonDir)
+	}
+}
+
+func TestGitDirs_NormalWorktree(t *testing.T) {
+	repo := testutil.NewTestRepo(t)
+	repo.CreateFile("README.md", "# Test")
+	repo.Commit("initial commit")
+
+	wtPath := filepath.Join(repo.ParentDir(), "wt-feature")
+	cmd := exec.Command("git", "-C", repo.Root, "worktree", "add", "-b", "feature", wtPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add failed: %v\noutput: %s", err, out)
+	}
+	t.Cleanup(func() { os.RemoveAll(wtPath) })
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(wtPath); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	gitDir, gitCommonDir, err := gitDirs(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Normal worktree: gitCommonDir base is .git, but gitDir differs
+	if filepath.Base(gitCommonDir) != ".git" {
+		t.Errorf("gitCommonDir base should be .git, got %q", filepath.Base(gitCommonDir))
+	}
+	if gitDir == gitCommonDir {
+		t.Error("gitDir and gitCommonDir should differ in a linked worktree")
+	}
+}
+
+func TestGitDirs_BareRepo(t *testing.T) {
+	bareRepo := testutil.NewBareTestRepo(t)
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(bareRepo.Root); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	gitDir, gitCommonDir, err := gitDirs(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Bare repo: base is NOT .git, and gitDir == gitCommonDir
+	if filepath.Base(gitCommonDir) == ".git" {
+		t.Errorf("gitCommonDir base should NOT be .git for bare repo, got %q", filepath.Base(gitCommonDir))
+	}
+	if gitDir != gitCommonDir {
+		t.Errorf("gitDir and gitCommonDir should be equal in bare repo root\ngitDir:      %s\ngitCommonDir: %s", gitDir, gitCommonDir)
+	}
+}
+
+func TestGitDirs_WorktreeFromBare(t *testing.T) {
+	bareRepo := testutil.NewBareTestRepo(t)
+
+	wtPath := filepath.Join(bareRepo.ParentDir(), "wt-test")
+	cmd := exec.Command("git", "-C", bareRepo.Root, "worktree", "add", wtPath, "main")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add failed: %v\noutput: %s", err, out)
+	}
+	t.Cleanup(func() { os.RemoveAll(wtPath) })
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(wtPath); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	gitDir, gitCommonDir, err := gitDirs(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Worktree from bare: base is NOT .git, and gitDir differs from gitCommonDir
+	if filepath.Base(gitCommonDir) == ".git" {
+		t.Errorf("gitCommonDir base should NOT be .git for bare-derived worktree, got %q", filepath.Base(gitCommonDir))
+	}
+	if gitDir == gitCommonDir {
+		t.Error("gitDir and gitCommonDir should differ in a linked worktree from bare")
+	}
+}
+
+func TestMainRepoRoot_BareRepo(t *testing.T) {
+	bareRepo := testutil.NewBareTestRepo(t)
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(bareRepo.Root); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	root, err := MainRepoRoot(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Bare repo: MainRepoRoot should return the bare repo directory itself
+	if root != bareRepo.Root {
+		t.Errorf("MainRepoRoot() = %q, want %q", root, bareRepo.Root) //nostyle:errorstrings
+	}
+}
+
+func TestMainRepoRoot_WorktreeFromBare(t *testing.T) {
+	bareRepo := testutil.NewBareTestRepo(t)
+
+	wtPath := filepath.Join(bareRepo.ParentDir(), "wt-test")
+	cmd := exec.Command("git", "-C", bareRepo.Root, "worktree", "add", wtPath, "main")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add failed: %v\noutput: %s", err, out)
+	}
+	t.Cleanup(func() { os.RemoveAll(wtPath) })
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(wtPath); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	root, err := MainRepoRoot(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// From a bare-derived worktree, MainRepoRoot should return the bare repo directory
+	if root != bareRepo.Root {
+		t.Errorf("MainRepoRoot() = %q, want %q", root, bareRepo.Root) //nostyle:errorstrings
+	}
+}
+
+func TestRepoName_BareRepo(t *testing.T) {
+	bareRepo := testutil.NewBareTestRepo(t)
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(bareRepo.Root); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	name, err := RepoName(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// BareTestRepo creates "repo.git", so RepoName should return "repo.git"
+	if name != "repo.git" {
+		t.Errorf("RepoName() = %q, want %q", name, "repo.git") //nostyle:errorstrings
+	}
+}
+
 func TestDetectRepoContext_UsesCache(t *testing.T) {
 	repo := testutil.NewTestRepo(t)
 	repo.CreateFile("README.md", "# Test")
