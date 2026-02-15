@@ -22,10 +22,10 @@ func TestDetectRepoContext_NormalRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rc.Bare {
+	if rc.bare {
 		t.Error("Bare should be false for normal repository")
 	}
-	if rc.Worktree {
+	if rc.worktree {
 		t.Error("Worktree should be false for main working tree")
 	}
 }
@@ -61,10 +61,10 @@ func TestDetectRepoContext_NormalWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rc.Bare {
+	if rc.bare {
 		t.Error("Bare should be false for normal repository's worktree")
 	}
-	if !rc.Worktree {
+	if !rc.worktree {
 		t.Error("Worktree should be true for linked worktree")
 	}
 }
@@ -89,10 +89,10 @@ func TestDetectRepoContext_BareRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !rc.Bare {
+	if !rc.bare {
 		t.Error("Bare should be true for bare repository")
 	}
-	if rc.Worktree {
+	if rc.worktree {
 		t.Error("Worktree should be false at bare repository root")
 	}
 }
@@ -126,11 +126,42 @@ func TestDetectRepoContext_WorktreeFromBare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !rc.Bare {
+	if !rc.bare {
 		t.Error("Bare should be true for worktree from bare repository")
 	}
-	if !rc.Worktree {
+	if !rc.worktree {
 		t.Error("Worktree should be true inside a linked worktree from bare")
+	}
+}
+
+// TestDetectRepoContext_DotGitBareRepo tests a bare repository where
+// git-common-dir ends with ".git" (created via core.bare = true).
+// This is the case that filepath.Base heuristic alone cannot detect.
+func TestDetectRepoContext_DotGitBareRepo(t *testing.T) {
+	bareRepo := testutil.NewDotGitBareTestRepo(t)
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(bareRepo.Root); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("failed to restore cwd: %v", err)
+		}
+	}()
+
+	rc, err := DetectRepoContext(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !rc.bare {
+		t.Error("bare should be true for dotgit bare repository")
+	}
+	if rc.worktree {
+		t.Error("worktree should be false at dotgit bare repository root")
 	}
 }
 
@@ -264,26 +295,26 @@ func TestWithRepoContext_CacheHit(t *testing.T) {
 		t.Fatalf("failed to get cwd: %v", err)
 	}
 
-	rc := RepoContext{Bare: false, Worktree: true, Dir: cwd}
+	rc := RepoContext{bare: false, worktree: true, dir: cwd}
 	ctx := WithRepoContext(t.Context(), rc)
 
 	got := RepoContextFrom(ctx)
 	if got == nil {
 		t.Fatal("RepoContextFrom returned nil, expected cached RepoContext")
 	}
-	if got.Bare != rc.Bare {
-		t.Errorf("bare: got %v, want %v", got.Bare, rc.Bare)
+	if got.bare != rc.bare {
+		t.Errorf("bare: got %v, want %v", got.bare, rc.bare)
 	}
-	if got.Worktree != rc.Worktree {
-		t.Errorf("worktree: got %v, want %v", got.Worktree, rc.Worktree)
+	if got.worktree != rc.worktree {
+		t.Errorf("worktree: got %v, want %v", got.worktree, rc.worktree)
 	}
-	if got.Dir != rc.Dir {
-		t.Errorf("dir: got %q, want %q", got.Dir, rc.Dir)
+	if got.dir != rc.dir {
+		t.Errorf("dir: got %q, want %q", got.dir, rc.dir)
 	}
 }
 
 func TestRepoContextFrom_CwdMismatch(t *testing.T) {
-	rc := RepoContext{Bare: false, Worktree: false, Dir: "/nonexistent/path"}
+	rc := RepoContext{bare: false, worktree: false, dir: "/nonexistent/path"}
 	ctx := WithRepoContext(t.Context(), rc)
 
 	got := RepoContextFrom(ctx)
@@ -663,7 +694,7 @@ func TestDetectRepoContext_UsesCache(t *testing.T) {
 	}
 
 	// Pre-populate context with a known RepoContext
-	cached := RepoContext{Bare: true, Worktree: true, Dir: cwd}
+	cached := RepoContext{bare: true, worktree: true, dir: cwd}
 	ctx := WithRepoContext(t.Context(), cached)
 
 	// DetectRepoContext should return the cached value without running git
@@ -673,10 +704,10 @@ func TestDetectRepoContext_UsesCache(t *testing.T) {
 	}
 	// The cached value has Bare=true, but the actual repo is not bare.
 	// If caching works, we get the cached value back.
-	if !rc.Bare {
+	if !rc.bare {
 		t.Error("expected cached Bare=true, got false (cache was not used)")
 	}
-	if !rc.Worktree {
+	if !rc.worktree {
 		t.Error("expected cached Worktree=true, got false (cache was not used)")
 	}
 }

@@ -18,9 +18,9 @@ import (
 //	{Bare: true,  Worktree: false} — bare repository root (no working tree)
 //	{Bare: true,  Worktree: true}  — linked worktree created from a bare repository
 type RepoContext struct {
-	Bare     bool   // true if the main repository is bare
-	Worktree bool   // true if running inside a linked worktree (not the main working tree)
-	Dir      string // working directory at detection time (used for cache invalidation)
+	bare     bool   // true if the main repository is bare
+	worktree bool   // true if running inside a linked worktree (not the main working tree)
+	dir      string // working directory at detection time (used for cache invalidation)
 }
 
 type repoContextKey struct{}
@@ -38,7 +38,7 @@ func RepoContextFrom(ctx context.Context) *RepoContext {
 	if !ok {
 		return nil
 	}
-	if cwd, err := os.Getwd(); err != nil || cwd != rc.Dir {
+	if cwd, err := os.Getwd(); err != nil || cwd != rc.dir {
 		return nil
 	}
 	return rc
@@ -58,34 +58,47 @@ var ErrBareRepository = errors.New(
 // DetectRepoContext detects whether the current repository is bare and whether
 // the current working directory is inside a linked worktree.
 //
-// Detection strategy uses `git rev-parse --git-dir --git-common-dir`:
+// Detection uses `git rev-parse --is-bare-repository --git-dir --git-common-dir`
+// in a single process invocation:
 //
-//   - Bare: filepath.Base(gitCommonDir) != ".git"
-//     In a normal repo, git-common-dir ends with ".git". In a bare repo,
-//     git-common-dir IS the repository directory (e.g., "repo.git" or any name).
+//   - Bare: detected by combining two signals with OR:
+//     1. --is-bare-repository flag (reliable at bare root, but returns false
+//     in bare-derived worktrees)
+//     2. filepath.Base(gitCommonDir) != ".git" (catches bare repos named
+//     without .git suffix, but misses bare repos where git-common-dir
+//     is a .git subdirectory)
 //   - Worktree: gitDir != gitCommonDir
 //     In the main working tree (or bare root), both are equal. In a linked
 //     worktree, gitDir points to a worktrees/X subdirectory.
-//
-// This approach works correctly across all four states (normal main, normal
-// worktree, bare root, bare worktree) with a single git process invocation.
 func DetectRepoContext(ctx context.Context) (RepoContext, error) {
 	if cached := RepoContextFrom(ctx); cached != nil {
 		return *cached, nil
 	}
 
-	gitDir, gitCommonDir, err := gitDirs(ctx)
+	cmd, err := gitCommand(ctx, "rev-parse", "--is-bare-repository", "--path-format=absolute", "--git-dir", "--git-common-dir")
 	if err != nil {
 		return RepoContext{}, err
 	}
+	out, err := cmd.Output()
+	if err != nil {
+		return RepoContext{}, err
+	}
+	lines := strings.SplitN(strings.TrimSpace(string(out)), "\n", 3)
+	if len(lines) != 3 {
+		return RepoContext{}, fmt.Errorf("unexpected output from git rev-parse: %q", string(out))
+	}
+
+	isBareFlag := lines[0] == "true"
+	gitDir := lines[1]
+	gitCommonDir := lines[2]
 
 	rc := RepoContext{
-		Bare:     filepath.Base(gitCommonDir) != ".git",
-		Worktree: gitDir != gitCommonDir,
+		bare:     isBareFlag || filepath.Base(gitCommonDir) != ".git",
+		worktree: gitDir != gitCommonDir,
 	}
 
 	if cwd, err := os.Getwd(); err == nil {
-		rc.Dir = cwd
+		rc.dir = cwd
 	}
 
 	return rc, nil
@@ -98,7 +111,7 @@ func IsBareRepository(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return rc.Bare, nil
+	return rc.bare, nil
 }
 
 // AssertNotBareRepository returns ErrBareRepository if the current repository
@@ -117,6 +130,46 @@ func AssertNotBareRepository(ctx context.Context) error {
 		return ErrBareRepository
 	}
 	return nil
+}
+
+// IsNormalMain reports whether the current directory is the main working tree
+// of a normal (non-bare) repository.
+func IsNormalMain(ctx context.Context) (bool, error) {
+	rc, err := DetectRepoContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !rc.bare && !rc.worktree, nil
+}
+
+// IsNormalWorktree reports whether the current directory is a linked worktree
+// of a normal (non-bare) repository.
+func IsNormalWorktree(ctx context.Context) (bool, error) {
+	rc, err := DetectRepoContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !rc.bare && rc.worktree, nil
+}
+
+// IsBareRoot reports whether the current directory is a bare repository root
+// (no working tree).
+func IsBareRoot(ctx context.Context) (bool, error) {
+	rc, err := DetectRepoContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	return rc.bare && !rc.worktree, nil
+}
+
+// IsBareWorktree reports whether the current directory is a linked worktree
+// created from a bare repository.
+func IsBareWorktree(ctx context.Context) (bool, error) {
+	rc, err := DetectRepoContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	return rc.bare && rc.worktree, nil
 }
 
 // gitDirs returns the git-dir and git-common-dir for the current repository.
