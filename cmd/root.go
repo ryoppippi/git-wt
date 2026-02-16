@@ -128,12 +128,12 @@ Configuration:
     Example: git config --add wt.hook "npm install"
              git config --add wt.hook "go generate ./..."
 
-  wt.delete-hook (--delete-hook)
+  wt.deletehook (--deletehook)
     Commands to run before deleting a worktree.
     Can be specified multiple times. Hooks run in the worktree directory
     before it is removed, so you can perform cleanup (e.g., push branches).
     Note: Hooks do NOT run when deleting a branch without a worktree.
-    Example: git config --add wt.delete-hook "git push origin --delete $(git branch --show-current)"
+    Example: git config --add wt.deletehook "git push origin --delete $(git branch --show-current)"
 
   wt.nocd (--nocd)
     Do not change directory to the worktree. Only print the worktree path.
@@ -186,7 +186,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&nocopyFlag, "nocopy", nil, "Exclude files matching pattern from copying (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&copyFlag, "copy", nil, "Always copy files matching pattern (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
-	rootCmd.Flags().StringArrayVar(&deleteHookFlag, "delete-hook", nil, "Run command before deleting a worktree (can be specified multiple times)")
+	rootCmd.Flags().StringArrayVar(&deleteHookFlag, "deletehook", nil, "Run command before deleting a worktree (can be specified multiple times)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
@@ -262,7 +262,7 @@ func loadConfig(ctx context.Context, cmd *cobra.Command) (git.Config, error) {
 	if cmd.Flags().Changed("hook") {
 		cfg.Hooks = hookFlag
 	}
-	if cmd.Flags().Changed("delete-hook") {
+	if cmd.Flags().Changed("deletehook") {
 		cfg.DeleteHooks = deleteHookFlag
 	}
 	if cmd.Flags().Changed("relative") {

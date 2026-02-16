@@ -895,9 +895,9 @@ func TestE2E_DeleteHooks(t *testing.T) {
 
 		markerPath := filepath.Join(t.TempDir(), "delete-hook-marker.txt")
 
-		out, err = runGitWt(t, binPath, repo.Root, "-D", "--delete-hook", fmt.Sprintf("touch %s", markerPath), "delete-hook-flag-test")
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--deletehook", fmt.Sprintf("touch %s", markerPath), "delete-hook-flag-test")
 		if err != nil {
-			t.Fatalf("git-wt -D --delete-hook failed: %v\noutput: %s", err, out)
+			t.Fatalf("git-wt -D --deletehook failed: %v\noutput: %s", err, out)
 		}
 
 		if _, err := os.Stat(markerPath); os.IsNotExist(err) {
@@ -917,7 +917,7 @@ func TestE2E_DeleteHooks(t *testing.T) {
 
 		markerPath := filepath.Join(t.TempDir(), "config-delete-hook-marker.txt")
 
-		repo.Git("config", "--add", "wt.delete-hook", fmt.Sprintf("touch %s", markerPath))
+		repo.Git("config", "--add", "wt.deletehook", fmt.Sprintf("touch %s", markerPath))
 
 		out, err := runGitWt(t, binPath, repo.Root, "delete-hook-config-test")
 		if err != nil {
@@ -948,11 +948,11 @@ func TestE2E_DeleteHooks(t *testing.T) {
 		orderPath := filepath.Join(t.TempDir(), "delete-hook-order.txt")
 
 		out, err = runGitWt(t, binPath, repo.Root, "-D",
-			"--delete-hook", fmt.Sprintf("echo first > %s", orderPath),
-			"--delete-hook", fmt.Sprintf("echo second >> %s", orderPath),
+			"--deletehook", fmt.Sprintf("echo first > %s", orderPath),
+			"--deletehook", fmt.Sprintf("echo second >> %s", orderPath),
 			"delete-hook-multi-test")
 		if err != nil {
-			t.Fatalf("git-wt -D --delete-hook (multiple) failed: %v\noutput: %s", err, out)
+			t.Fatalf("git-wt -D --deletehook (multiple) failed: %v\noutput: %s", err, out)
 		}
 
 		content, err := os.ReadFile(orderPath)
@@ -976,7 +976,7 @@ func TestE2E_DeleteHooks(t *testing.T) {
 
 		markerPath := filepath.Join(t.TempDir(), "branch-only-marker.txt")
 
-		out, err := runGitWt(t, binPath, repo.Root, "-D", "--delete-hook", fmt.Sprintf("touch %s", markerPath), "orphan-branch")
+		out, err := runGitWt(t, binPath, repo.Root, "-D", "--deletehook", fmt.Sprintf("touch %s", markerPath), "orphan-branch")
 		if err != nil {
 			t.Fatalf("git-wt -D failed: %v\noutput: %s", err, out)
 		}
@@ -995,16 +995,16 @@ func TestE2E_DeleteHooks(t *testing.T) {
 		configMarker := filepath.Join(t.TempDir(), "config-marker.txt")
 		flagMarker := filepath.Join(t.TempDir(), "flag-marker.txt")
 
-		repo.Git("config", "--add", "wt.delete-hook", fmt.Sprintf("touch %s", configMarker))
+		repo.Git("config", "--add", "wt.deletehook", fmt.Sprintf("touch %s", configMarker))
 
 		out, err := runGitWt(t, binPath, repo.Root, "delete-hook-override-test")
 		if err != nil {
 			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
 		}
 
-		out, err = runGitWt(t, binPath, repo.Root, "-D", "--delete-hook", fmt.Sprintf("touch %s", flagMarker), "delete-hook-override-test")
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--deletehook", fmt.Sprintf("touch %s", flagMarker), "delete-hook-override-test")
 		if err != nil {
-			t.Fatalf("git-wt -D --delete-hook failed: %v\noutput: %s", err, out)
+			t.Fatalf("git-wt -D --deletehook failed: %v\noutput: %s", err, out)
 		}
 
 		if _, err := os.Stat(flagMarker); os.IsNotExist(err) {
@@ -1012,7 +1012,7 @@ func TestE2E_DeleteHooks(t *testing.T) {
 		}
 
 		if _, err := os.Stat(configMarker); !os.IsNotExist(err) {
-			t.Error("config delete hook should NOT have run (--delete-hook flag overrides config)")
+			t.Error("config delete hook should NOT have run (--deletehook flag overrides config)")
 		}
 	})
 
@@ -1028,7 +1028,7 @@ func TestE2E_DeleteHooks(t *testing.T) {
 		}
 		wtPath := worktreePath(out)
 
-		_, _, err = runGitWtStdout(t, binPath, repo.Root, "-D", "--delete-hook", "exit 1", "delete-hook-fail-test")
+		_, _, err = runGitWtStdout(t, binPath, repo.Root, "-D", "--deletehook", "exit 1", "delete-hook-fail-test")
 		if err == nil {
 			t.Fatal("command should fail when delete hook fails")
 		}
@@ -1052,9 +1052,9 @@ func TestE2E_DeleteHooks(t *testing.T) {
 
 		pwdFile := filepath.Join(t.TempDir(), "hook-pwd.txt")
 
-		out, err = runGitWt(t, binPath, repo.Root, "-D", "--delete-hook", fmt.Sprintf("pwd > %s", pwdFile), "delete-hook-cwd-test")
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--deletehook", fmt.Sprintf("pwd > %s", pwdFile), "delete-hook-cwd-test")
 		if err != nil {
-			t.Fatalf("git-wt -D --delete-hook failed: %v\noutput: %s", err, out)
+			t.Fatalf("git-wt -D --deletehook failed: %v\noutput: %s", err, out)
 		}
 
 		content, err := os.ReadFile(pwdFile)
@@ -1079,9 +1079,9 @@ func TestE2E_DeleteHooks(t *testing.T) {
 			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
 		}
 
-		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-D", "--delete-hook", "echo delete-hook-output-test", "delete-hook-stderr-test")
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-D", "--deletehook", "echo delete-hook-output-test", "delete-hook-stderr-test")
 		if err != nil {
-			t.Fatalf("git-wt -D --delete-hook failed: %v\nstderr: %s", err, stderr)
+			t.Fatalf("git-wt -D --deletehook failed: %v\nstderr: %s", err, stderr)
 		}
 
 		if strings.Contains(stdout, "delete-hook-output-test") {
@@ -1314,7 +1314,7 @@ func TestE2E_Complete(t *testing.T) {
 			"--copyuntracked",
 			"--copymodified",
 			"--hook",
-			"--delete-hook",
+			"--deletehook",
 			"--nocopy",
 			"--nocd",
 			"--relative",

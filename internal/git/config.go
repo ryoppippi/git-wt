@@ -18,7 +18,7 @@ const (
 	configKeyNoCopy        = "wt.nocopy"
 	configKeyCopy          = "wt.copy"
 	configKeyHook          = "wt.hook"
-	configKeyDeleteHook    = "wt.delete-hook"
+	configKeyDeleteHook    = "wt.deletehook"
 	configKeyNoCd          = "wt.nocd"
 	configKeyRelative      = "wt.relative"
 )
