@@ -49,6 +49,7 @@ var (
 	copyFlag           []string
 	hookFlag           []string
 	deleteHookFlag     []string
+	removerFlag        string
 	allowDeleteDefault bool
 	relativeFlag       bool
 	jsonFlag           bool
@@ -138,6 +139,14 @@ Configuration:
     Note: Hooks do NOT run when deleting a branch without a worktree.
     Example: git config --add wt.deletehook "git push origin --delete $(git branch --show-current)"
 
+  wt.remover (--remover)
+    Custom command to remove the worktree directory instead of 'git worktree remove'.
+    The worktree path is passed as an argument to the command.
+    After the command completes, 'git worktree prune' is run automatically.
+    Useful for faster deletion via trash commands (e.g., trash, trash-put).
+    Default: (not set, uses 'git worktree remove')
+    Example: git config wt.remover "trash-put"
+
   wt.nocd (--nocd)
     Do not change directory to the worktree. Only print the worktree path.
     Supported values:
@@ -190,6 +199,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&copyFlag, "copy", nil, "Always copy files matching pattern (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&deleteHookFlag, "deletehook", nil, "Run command before deleting a worktree (can be specified multiple times)")
+	rootCmd.Flags().StringVar(&removerFlag, "remover", "", "Custom command to remove worktree directory (e.g., trash-put)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
@@ -290,6 +300,9 @@ func loadConfig(ctx context.Context, cmd *cobra.Command) (git.Config, error) {
 	}
 	if cmd.Flags().Changed("deletehook") {
 		cfg.DeleteHooks = deleteHookFlag
+	}
+	if cmd.Flags().Changed("remover") {
+		cfg.Remover = removerFlag
 	}
 	if cmd.Flags().Changed("relative") {
 		cfg.Relative = relativeFlag
@@ -603,8 +616,17 @@ func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string,
 			}
 
 			// Remove worktree
-			if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
-				return fmt.Errorf("failed to remove worktree: %w", err)
+			if cfg.Remover != "" {
+				if err := git.RunRemover(ctx, cfg.Remover, wt.Path, mainRoot, os.Stderr); err != nil {
+					return fmt.Errorf("remover failed for worktree %q: %w", branch, err)
+				}
+				if err := git.PruneWorktrees(ctx); err != nil {
+					return fmt.Errorf("git worktree prune failed after remover for %q: %w", branch, err)
+				}
+			} else {
+				if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
+					return fmt.Errorf("failed to remove worktree: %w", err)
+				}
 			}
 
 			// Delete branch (only if it exists as a local branch)

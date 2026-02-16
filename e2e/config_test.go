@@ -4,6 +4,7 @@
 //   - TestE2E_Nocd: nocd tests (config, config_with_init, create_config)
 //   - TestE2E_Hooks: hook tests (flag, config, multiple, not_run_on_existing, flag_overrides_config, failure, output_to_stderr)
 //   - TestE2E_DeleteHooks: delete hook tests (flag, config, multiple, not_run_on_branch_only, flag_overrides_config, failure_prevents_deletion, hook_runs_in_worktree_directory, output_to_stderr)
+//   - TestE2E_Remover: custom worktree remover tests (flag, config, flag_overrides_config, failure_prevents_deletion, prune_cleans_up)
 //   - TestE2E_Complete: __complete command output tests
 package e2e
 
@@ -1252,6 +1253,168 @@ func TestE2E_Relative(t *testing.T) {
 	})
 }
 
+func TestE2E_Remover(t *testing.T) {
+	t.Parallel()
+	binPath := buildBinary(t)
+
+	t.Run("flag", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "remover-flag-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+		wtPath := worktreePath(out)
+
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--remover", "rm -rf", "remover-flag-test")
+		if err != nil {
+			t.Fatalf("git-wt -D --remover failed: %v\noutput: %s", err, out)
+		}
+
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree directory should have been removed by custom remover")
+		}
+	})
+
+	t.Run("config", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		repo.Git("config", "wt.remover", "rm -rf")
+
+		out, err := runGitWt(t, binPath, repo.Root, "remover-config-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+		wtPath := worktreePath(out)
+
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "remover-config-test")
+		if err != nil {
+			t.Fatalf("git-wt -D failed: %v\noutput: %s", err, out)
+		}
+
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree directory should have been removed by custom remover from config")
+		}
+	})
+
+	t.Run("flag_overrides_config", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		configMarker := filepath.Join(t.TempDir(), "config-remover-ran.txt")
+		flagMarker := filepath.Join(t.TempDir(), "flag-remover-ran.txt")
+
+		repo.Git("config", "wt.remover", fmt.Sprintf("sh -c 'touch %s && rm -rf \"$1\"' --", configMarker))
+
+		out, err := runGitWt(t, binPath, repo.Root, "remover-override-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+
+		out, err = runGitWt(t, binPath, repo.Root, "-D",
+			"--remover", fmt.Sprintf("sh -c 'touch %s && rm -rf \"$1\"' --", flagMarker),
+			"remover-override-test")
+		if err != nil {
+			t.Fatalf("git-wt -D --remover failed: %v\noutput: %s", err, out)
+		}
+
+		if _, err := os.Stat(flagMarker); os.IsNotExist(err) {
+			t.Error("flag remover marker should have been created")
+		}
+
+		if _, err := os.Stat(configMarker); !os.IsNotExist(err) {
+			t.Error("config remover should NOT have run (--remover flag overrides config)")
+		}
+	})
+
+	t.Run("failure_prevents_deletion", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "remover-fail-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+		wtPath := worktreePath(out)
+
+		_, _, err = runGitWtStdout(t, binPath, repo.Root, "-D", "--remover", "exit 1", "remover-fail-test")
+		if err == nil {
+			t.Fatal("command should fail when remover fails")
+		}
+
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Error("worktree should NOT have been deleted when remover fails")
+		}
+	})
+
+	t.Run("prune_cleans_up", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		out, err := runGitWt(t, binPath, repo.Root, "remover-prune-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--remover", "rm -rf", "remover-prune-test")
+		if err != nil {
+			t.Fatalf("git-wt -D --remover failed: %v\noutput: %s", err, out)
+		}
+
+		wtList, err := runGitWt(t, binPath, repo.Root)
+		if err != nil {
+			t.Fatalf("failed to list worktrees: %v\noutput: %s", err, wtList)
+		}
+
+		if strings.Contains(wtList, "remover-prune-test") {
+			t.Errorf("worktree list should not contain removed worktree, got: %s", wtList)
+		}
+	})
+
+	t.Run("path_with_spaces", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		spaceBase := filepath.Join(t.TempDir(), "dir with spaces")
+		if err := os.MkdirAll(spaceBase, 0o755); err != nil {
+			t.Fatalf("failed to create dir with spaces: %v", err)
+		}
+
+		out, err := runGitWt(t, binPath, repo.Root, "--basedir", spaceBase, "space-test")
+		if err != nil {
+			t.Fatalf("failed to create worktree: %v\noutput: %s", err, out)
+		}
+		wtPath := worktreePath(out)
+
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Fatalf("worktree should exist at %q", wtPath)
+		}
+
+		out, err = runGitWt(t, binPath, repo.Root, "-D", "--basedir", spaceBase, "--remover", "rm -rf", "space-test")
+		if err != nil {
+			t.Fatalf("git-wt -D --remover with spaces failed: %v\noutput: %s", err, out)
+		}
+
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("worktree directory should have been removed despite spaces in path")
+		}
+	})
+}
+
 // TestE2E_Complete tests the __complete command output.
 func TestE2E_Complete(t *testing.T) {
 	t.Parallel()
@@ -1315,6 +1478,7 @@ func TestE2E_Complete(t *testing.T) {
 			"--copymodified",
 			"--hook",
 			"--deletehook",
+			"--remover",
 			"--nocopy",
 			"--nocd",
 			"--relative",
