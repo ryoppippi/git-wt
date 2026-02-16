@@ -76,6 +76,21 @@ func ListWorktrees(ctx context.Context) ([]Worktree, error) {
 	return worktrees, nil
 }
 
+// CurrentLocation returns the path that identifies the current position
+// in the worktree list.
+//   - bare root: returns MainRepoRoot() (bare repo directory path)
+//   - worktree or normal repo: returns CurrentWorktree() (--show-toplevel)
+func CurrentLocation(ctx context.Context) (string, error) {
+	isBareRoot, err := IsBareRoot(ctx)
+	if err != nil {
+		return "", err
+	}
+	if isBareRoot {
+		return MainRepoRoot(ctx)
+	}
+	return CurrentWorktree(ctx)
+}
+
 // CurrentWorktree returns the path of the current worktree.
 func CurrentWorktree(ctx context.Context) (string, error) {
 	cmd, err := gitCommand(ctx, "rev-parse", "--show-toplevel")
@@ -220,7 +235,7 @@ func AddWorktree(ctx context.Context, path, branch string, copyOpts CopyOptions)
 	copyOpts.ExcludeDirs = append(copyOpts.ExcludeDirs, parentDir)
 
 	// Copy files to new worktree
-	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts); err != nil {
+	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts, os.Stderr); err != nil {
 		return fmt.Errorf("failed to copy files: %w", err)
 	}
 
@@ -267,7 +282,7 @@ func AddWorktreeWithNewBranch(ctx context.Context, path, branch, startPoint stri
 	copyOpts.ExcludeDirs = append(copyOpts.ExcludeDirs, parentDir)
 
 	// Copy files to new worktree
-	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts); err != nil {
+	if err := CopyFilesToWorktree(ctx, srcRoot, path, copyOpts, os.Stderr); err != nil {
 		return fmt.Errorf("failed to copy files: %w", err)
 	}
 

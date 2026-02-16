@@ -71,6 +71,9 @@ Note: The default branch (e.g., main, master) is protected from accidental delet
       - Without worktree: deletion is blocked entirely.
       Use --allow-delete-default to override and delete the branch.
 
+Note: Bare repositories are not currently supported.
+      See https://github.com/k1LoW/git-wt/issues/130 for details.
+
 Shell Integration:
   Add the following to your shell config to enable worktree switching and completion:
 
@@ -200,18 +203,35 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return runInit(initShell, nocd)
 	}
 
+	// Detect repo context once and thread it through context.
+	// Subsequent calls to DetectRepoContext (via AssertNotBareRepository etc.)
+	// will reuse the cached value instead of spawning git processes again.
+	rc, err := git.DetectRepoContext(ctx)
+	if err != nil {
+		return err
+	}
+	ctx = git.WithRepoContext(ctx, rc)
+
 	// No arguments: list worktrees
 	if len(args) == 0 {
 		return listWorktrees(ctx)
 	}
 
 	// Handle delete flags (multiple arguments allowed)
+	// Guard: bare repositories are not supported for delete operation.
+	// Remove this guard when bare delete support is implemented.
 	if forceDeleteFlag {
+		if err := git.AssertNotBareRepository(ctx); err != nil {
+			return err
+		}
 		// Remove duplicates while preserving order
 		args = uniqueArgs(args)
 		return deleteWorktrees(ctx, cmd, args, true)
 	}
 	if deleteFlag {
+		if err := git.AssertNotBareRepository(ctx); err != nil {
+			return err
+		}
 		// Remove duplicates while preserving order
 		args = uniqueArgs(args)
 		return deleteWorktrees(ctx, cmd, args, false)
@@ -221,6 +241,12 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	// git wt <branch> [<start-point>]
 	if len(args) > 2 {
 		return fmt.Errorf("too many arguments: expected <branch> [<start-point>], got %d arguments", len(args))
+	}
+
+	// Guard: bare repositories are not supported for add/switch operation.
+	// Remove this guard when bare add/switch support is implemented.
+	if err := git.AssertNotBareRepository(ctx); err != nil {
+		return err
 	}
 
 	branch := args[0]
@@ -440,9 +466,9 @@ func listWorktrees(ctx context.Context) error {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	currentPath, err := git.CurrentWorktree(ctx)
+	currentPath, err := git.CurrentLocation(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get current worktree: %w", err)
+		return fmt.Errorf("failed to get current location: %w", err)
 	}
 
 	if jsonFlag {
@@ -482,7 +508,11 @@ func listWorktrees(ctx context.Context) error {
 		if wt.Path == currentPath {
 			marker = "*"
 		}
-		if err := table.Append([]string{marker, wt.Path, wt.Branch, wt.Head}); err != nil {
+		branch := wt.Branch
+		if wt.Bare {
+			branch = "(bare)"
+		}
+		if err := table.Append([]string{marker, wt.Path, branch, wt.Head}); err != nil {
 			return fmt.Errorf("failed to append row: %w", err)
 		}
 	}
@@ -579,8 +609,13 @@ func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string,
 
 			// Delete branch (only if it exists as a local branch)
 			// Let git branch -d/-D handle the merge check
-			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists
+			// If we deleted the current worktree, run git from mainRoot since cwd no longer exists.
+			// needCdToMain stays true for subsequent iterations as well.
 			if branchExists {
+				dir := ""
+				if needCdToMain {
+					dir = mainRoot
+				}
 				if isDefault && !allowDeleteDefault {
 					// Default branch is protected - only delete worktree
 					if wtDir == wt.Branch {
@@ -588,7 +623,7 @@ func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string,
 					} else {
 						fmt.Printf("Deleted worktree %q (branch %q is default, not deleted)\n", wtDir, wt.Branch)
 					}
-				} else if err := git.DeleteBranchInDir(ctx, wt.Branch, force, mainRoot); err != nil {
+				} else if err := git.DeleteBranchInDir(ctx, wt.Branch, force, dir); err != nil {
 					// Treat as non-fatal since worktree removal succeeded
 					if wtDir == wt.Branch {
 						fmt.Printf("Deleted worktree, but failed to delete branch %q (use -D to force)\n", wt.Branch)

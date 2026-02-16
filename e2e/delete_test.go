@@ -233,6 +233,72 @@ func TestE2E_DeleteWorktree(t *testing.T) {
 		}
 	})
 
+	// PR #137 fix: delete worktree from a derived branch should succeed
+	// When on branch b (derived from a), deleting worktree a with -d should
+	// succeed because a is fully merged into the current HEAD (b).
+	t.Run("delete_from_derived_branch", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree a and make a commit
+		out, err := runGitWt(t, binPath, repo.Root, "branch-a")
+		if err != nil {
+			t.Fatalf("failed to create worktree branch-a: %v", err)
+		}
+		wtPathA := worktreePath(out)
+
+		if err := os.WriteFile(filepath.Join(wtPathA, "a.txt"), []byte("a"), 0600); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+		cmd := exec.Command("git", "add", "-A")
+		cmd.Dir = wtPathA
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git add failed: %v", err)
+		}
+		cmd = exec.Command("git", "commit", "-m", "commit on a")
+		cmd.Dir = wtPathA
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git commit failed: %v", err)
+		}
+
+		// Create worktree b from branch-a (b includes a's commit)
+		out, err = runGitWt(t, binPath, wtPathA, "branch-b")
+		if err != nil {
+			t.Fatalf("failed to create worktree branch-b: %v", err)
+		}
+		wtPathB := worktreePath(out)
+
+		// From branch-b, delete worktree branch-a with safe delete
+		// This should succeed because branch-a is fully merged into branch-b's HEAD
+		out, err = runGitWt(t, binPath, wtPathB, "-d", "branch-a")
+		if err != nil {
+			t.Fatalf("git-wt -d should succeed when branch is merged into current HEAD: %v\noutput: %s", err, out)
+		}
+
+		// Worktree should be deleted
+		if _, err := os.Stat(wtPathA); !os.IsNotExist(err) {
+			t.Error("worktree branch-a should have been deleted")
+		}
+
+		// Branch should also be deleted (fully merged)
+		if strings.Contains(out, "failed to delete branch") {
+			t.Errorf("branch deletion should succeed since branch-a is merged into branch-b, got: %s", out)
+		}
+
+		// Verify branch no longer exists
+		cmd = exec.Command("git", "branch", "--list", "branch-a")
+		cmd.Dir = repo.Root
+		branchOut, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("git branch --list failed: %v", err)
+		}
+		if strings.Contains(string(branchOut), "branch-a") {
+			t.Error("branch-a should have been deleted since it was fully merged into branch-b")
+		}
+	})
+
 	// PR #64 fix: shell integration works correctly when branch deletion fails
 	t.Run("with_unmerged_branch_shell_integration", func(t *testing.T) {
 		t.Parallel()
