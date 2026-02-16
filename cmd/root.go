@@ -48,6 +48,7 @@ var (
 	nocopyFlag        []string
 	copyFlag           []string
 	hookFlag           []string
+	deleteHookFlag     []string
 	removerFlag        string
 	allowDeleteDefault bool
 	relativeFlag       bool
@@ -131,6 +132,13 @@ Configuration:
     Example: git config --add wt.hook "npm install"
              git config --add wt.hook "go generate ./..."
 
+  wt.deletehook (--deletehook)
+    Commands to run before deleting a worktree.
+    Can be specified multiple times. Hooks run in the worktree directory
+    before it is removed, so you can perform cleanup (e.g., push branches).
+    Note: Hooks do NOT run when deleting a branch without a worktree.
+    Example: git config --add wt.deletehook "git push origin --delete $(git branch --show-current)"
+
   wt.remover (--remover)
     Custom command to remove the worktree directory instead of 'git worktree remove'.
     The worktree path is passed as an argument to the command.
@@ -190,6 +198,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&nocopyFlag, "nocopy", nil, "Exclude files matching pattern from copying (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&copyFlag, "copy", nil, "Always copy files matching pattern (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
+	rootCmd.Flags().StringArrayVar(&deleteHookFlag, "deletehook", nil, "Run command before deleting a worktree (can be specified multiple times)")
 	rootCmd.Flags().StringVar(&removerFlag, "remover", "", "Custom command to remove worktree directory (e.g., trash-put)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
@@ -288,6 +297,9 @@ func loadConfig(ctx context.Context, cmd *cobra.Command) (git.Config, error) {
 	}
 	if cmd.Flags().Changed("hook") {
 		cfg.Hooks = hookFlag
+	}
+	if cmd.Flags().Changed("deletehook") {
+		cfg.DeleteHooks = deleteHookFlag
 	}
 	if cmd.Flags().Changed("remover") {
 		cfg.Remover = removerFlag
@@ -596,6 +608,11 @@ func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string,
 				if len(untrackedFiles) > 0 {
 					return fmt.Errorf("worktree %q has untracked files, use -D to force deletion", branch)
 				}
+			}
+
+			// Run delete hooks before worktree removal (directory still exists)
+			if err := git.RunHooks(ctx, cfg.DeleteHooks, wt.Path, os.Stderr); err != nil {
+				return fmt.Errorf("delete hook failed for worktree %q: %w", branch, err)
 			}
 
 			// Remove worktree

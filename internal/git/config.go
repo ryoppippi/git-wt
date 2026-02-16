@@ -18,6 +18,7 @@ const (
 	configKeyNoCopy        = "wt.nocopy"
 	configKeyCopy          = "wt.copy"
 	configKeyHook          = "wt.hook"
+	configKeyDeleteHook    = "wt.deletehook"
 	configKeyRemover       = "wt.remover"
 	configKeyNoCd          = "wt.nocd"
 	configKeyRelative      = "wt.relative"
@@ -32,6 +33,7 @@ type Config struct {
 	NoCopy        []string
 	Copy          []string
 	Hooks         []string
+	DeleteHooks   []string
 	Remover       string
 	NoCd          bool
 	Relative      bool
@@ -115,6 +117,13 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return cfg, err
 	}
 	cfg.Hooks = hooks
+
+	// DeleteHooks
+	deleteHooks, err := GitConfig(ctx, configKeyDeleteHook)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.DeleteHooks = deleteHooks
 
 	// Remover
 	remover, err := GitConfig(ctx, configKeyRemover)
