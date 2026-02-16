@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/k1LoW/exec"
 )
 
 // DetachedMarker is used to indicate a detached HEAD state.
@@ -317,6 +320,30 @@ This directory contains Git worktrees created with ` + "`git wt`" + `.
 	}
 
 	return nil
+}
+
+// RunRemover executes a custom remover command to remove a worktree directory.
+// The worktree path is passed safely as a positional argument via sh -c.
+func RunRemover(ctx context.Context, remover string, wtPath string, dir string, w io.Writer) error {
+	cmd := exec.CommandContext(ctx, "sh", "-c", remover+` "$1"`, "--", wtPath)
+	cmd.Dir = dir
+	cmd.Stdout = w
+	cmd.Stderr = w
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("remover %q failed: %w", remover, err)
+	}
+	return nil
+}
+
+// PruneWorktrees runs 'git worktree prune' to clean up stale worktree entries.
+func PruneWorktrees(ctx context.Context) error {
+	cmd, err := gitCommand(ctx, "worktree", "prune")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // RemoveWorktree removes a worktree.

@@ -48,6 +48,7 @@ var (
 	nocopyFlag        []string
 	copyFlag           []string
 	hookFlag           []string
+	removerFlag        string
 	allowDeleteDefault bool
 	relativeFlag       bool
 	jsonFlag           bool
@@ -130,6 +131,14 @@ Configuration:
     Example: git config --add wt.hook "npm install"
              git config --add wt.hook "go generate ./..."
 
+  wt.remover (--remover)
+    Custom command to remove the worktree directory instead of 'git worktree remove'.
+    The worktree path is passed as an argument to the command.
+    After the command completes, 'git worktree prune' is run automatically.
+    Useful for faster deletion via trash commands (e.g., trash, trash-put).
+    Default: (not set, uses 'git worktree remove')
+    Example: git config wt.remover "trash-put"
+
   wt.nocd (--nocd)
     Do not change directory to the worktree. Only print the worktree path.
     Supported values:
@@ -181,6 +190,7 @@ func init() {
 	rootCmd.Flags().StringArrayVar(&nocopyFlag, "nocopy", nil, "Exclude files matching pattern from copying (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&copyFlag, "copy", nil, "Always copy files matching pattern (can be specified multiple times)")
 	rootCmd.Flags().StringArrayVar(&hookFlag, "hook", nil, "Run command after creating new worktree (can be specified multiple times)")
+	rootCmd.Flags().StringVar(&removerFlag, "remover", "", "Custom command to remove worktree directory (e.g., trash-put)")
 	rootCmd.Flags().BoolVar(&allowDeleteDefault, "allow-delete-default", false, "Allow deletion of the default branch (main, master)")
 	rootCmd.Flags().BoolVar(&relativeFlag, "relative", false, "Append current subdirectory to worktree path (like git diff --relative)")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output in JSON format")
@@ -217,7 +227,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		}
 		// Remove duplicates while preserving order
 		args = uniqueArgs(args)
-		return deleteWorktrees(ctx, args, true)
+		return deleteWorktrees(ctx, cmd, args, true)
 	}
 	if deleteFlag {
 		if err := git.AssertNotBareRepository(ctx); err != nil {
@@ -225,7 +235,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		}
 		// Remove duplicates while preserving order
 		args = uniqueArgs(args)
-		return deleteWorktrees(ctx, args, false)
+		return deleteWorktrees(ctx, cmd, args, false)
 	}
 
 	// For create/switch: validate argument count (like git branch)
@@ -278,6 +288,9 @@ func loadConfig(ctx context.Context, cmd *cobra.Command) (git.Config, error) {
 	}
 	if cmd.Flags().Changed("hook") {
 		cfg.Hooks = hookFlag
+	}
+	if cmd.Flags().Changed("remover") {
+		cfg.Remover = removerFlag
 	}
 	if cmd.Flags().Changed("relative") {
 		cfg.Relative = relativeFlag
@@ -511,11 +524,16 @@ func listWorktrees(ctx context.Context) error {
 	return nil
 }
 
-func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
+func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string, force bool) error {
 	// Get main repo root before any deletion (needed for running git commands after worktree removal)
 	mainRoot, err := git.MainRepoRoot(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get main repository root: %w", err)
+	}
+
+	cfg, err := loadConfig(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Check if current directory is one of the worktrees being deleted
@@ -581,8 +599,17 @@ func deleteWorktrees(ctx context.Context, branches []string, force bool) error {
 			}
 
 			// Remove worktree
-			if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
-				return fmt.Errorf("failed to remove worktree: %w", err)
+			if cfg.Remover != "" {
+				if err := git.RunRemover(ctx, cfg.Remover, wt.Path, mainRoot, os.Stderr); err != nil {
+					return fmt.Errorf("remover failed for worktree %q: %w", branch, err)
+				}
+				if err := git.PruneWorktrees(ctx); err != nil {
+					return fmt.Errorf("git worktree prune failed after remover for %q: %w", branch, err)
+				}
+			} else {
+				if err := git.RemoveWorktree(ctx, wt.Path, force); err != nil {
+					return fmt.Errorf("failed to remove worktree: %w", err)
+				}
 			}
 
 			// Delete branch (only if it exists as a local branch)
