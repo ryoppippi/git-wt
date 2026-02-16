@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 )
 
-func copyFile(src, dst string) error {
+func copyFile(src, dst string) (err error) {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -39,7 +39,11 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	if _, err := io.Copy(out, in); err != nil {
 		return err
