@@ -167,12 +167,12 @@ func FindWorktreeByBranchOrDir(ctx context.Context, query string) (*Worktree, er
 	if info, err := os.Stat(query); err == nil && info.IsDir() {
 		absPath, err := filepath.Abs(query)
 		if err != nil {
-			return nil, nil
+			return nil, fmt.Errorf("failed to get absolute path for %q: %w", query, err)
 		}
 		// Resolve symlinks (e.g., macOS /var -> /private/var)
 		absPath, err = filepath.EvalSymlinks(absPath)
 		if err != nil {
-			return nil, nil
+			return nil, fmt.Errorf("failed to resolve symlinks for %q: %w", absPath, err)
 		}
 		for _, wt := range worktrees {
 			wtPath, err := filepath.EvalSymlinks(wt.Path)

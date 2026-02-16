@@ -42,7 +42,7 @@ func copyFile(src, dst string) error {
 	return copyFileTraditional(src, dst, srcInfo)
 }
 
-func copyFileTraditional(src, dst string, srcInfo os.FileInfo) error {
+func copyFileTraditional(src, dst string, srcInfo os.FileInfo) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -53,7 +53,11 @@ func copyFileTraditional(src, dst string, srcInfo os.FileInfo) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	if _, err := io.Copy(out, in); err != nil {
 		return err

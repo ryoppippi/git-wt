@@ -357,42 +357,35 @@ Register-ArgumentCompleter -Native -CommandName git -ScriptBlock $scriptBlock
 `
 
 func runInit(shell string, ignoreSwitchDirectory bool) error {
+	var header, wrapper, completion string
 	switch shell {
 	case "bash":
-		fmt.Fprint(os.Stdout, "# git-wt shell hook for bash\n")
-		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, bashGitWrapper)
-		}
-		fmt.Fprint(os.Stdout, bashCompletion)
-		return nil
+		header = "# git-wt shell hook for bash\n"
+		wrapper = bashGitWrapper
+		completion = bashCompletion
 	case "zsh":
-		fmt.Fprint(os.Stdout, "# git-wt shell hook for zsh\n")
-		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, zshGitWrapper)
-		}
-		fmt.Fprint(os.Stdout, zshCompletion)
-		return nil
+		header = "# git-wt shell hook for zsh\n"
+		wrapper = zshGitWrapper
+		completion = zshCompletion
 	case "fish":
-		if _, err := io.WriteString(os.Stdout, "# git-wt shell hook for fish\n"); err != nil {
-			return err
-		}
-		if !ignoreSwitchDirectory {
-			if _, err := io.WriteString(os.Stdout, fishGitWrapper); err != nil {
-				return err
-			}
-		}
-		if _, err := io.WriteString(os.Stdout, fishCompletion); err != nil {
-			return err
-		}
-		return nil
+		header = "# git-wt shell hook for fish\n"
+		wrapper = fishGitWrapper
+		completion = fishCompletion
 	case "powershell":
-		fmt.Fprint(os.Stdout, "# git-wt shell hook for PowerShell\n")
-		if !ignoreSwitchDirectory {
-			fmt.Fprint(os.Stdout, powershellGitWrapper)
-		}
-		fmt.Fprint(os.Stdout, powershellCompletion)
-		return nil
+		header = "# git-wt shell hook for PowerShell\n"
+		wrapper = powershellGitWrapper
+		completion = powershellCompletion
 	default:
 		return fmt.Errorf("unsupported shell: %s (supported: bash, zsh, fish, powershell)", shell)
 	}
+	if _, err := io.WriteString(os.Stdout, header); err != nil {
+		return err
+	}
+	if !ignoreSwitchDirectory {
+		if _, err := io.WriteString(os.Stdout, wrapper); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(os.Stdout, completion)
+	return err
 }
