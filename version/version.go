@@ -2,7 +2,7 @@ package version
 
 const (
 	Name    = "git-wt"
-	Version = "0.26.0" //nostyle:repetition
+	Version = "0.26.1" //nostyle:repetition
 )
 
 var Revision = "HEAD"
