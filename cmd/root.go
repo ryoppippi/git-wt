@@ -40,6 +40,7 @@ var (
 	forceDeleteFlag bool
 	initShell       string
 	nocd            bool
+	branchFlag      string
 	// Config override flags.
 	basedirFlag       string
 	copyignoredFlag   bool
@@ -62,11 +63,12 @@ var rootCmd = &cobra.Command{
 	Long: `git-wt is a Git subcommand that makes 'git worktree' simple.
 
 Examples:
-  git wt                                    List all worktrees
-  git wt <branch|worktree|path>              Switch to worktree (create worktree/branch if needed)
+  git wt                                         List all worktrees
+  git wt <branch|worktree|path>                  Switch to worktree (create worktree/branch if needed)
   git wt <branch|worktree|path> <start-point>    Create worktree from start-point (e.g., origin/main)
-  git wt -d <branch|worktree|path>...       Delete worktree and branch (safe)
-  git wt -D <branch|worktree|path>...       Force delete worktree and branch
+  git wt -b <branch> <worktree>                  Create worktree with a different branch name
+  git wt -d <branch|worktree|path>...            Delete worktree and branch (safe)
+  git wt -D <branch|worktree|path>...            Force delete worktree and branch
 
 Note: The default branch (e.g., main, master) is protected from accidental deletion.
       - With worktree: worktree is deleted, but branch is preserved.
@@ -197,6 +199,7 @@ func init() {
 	if err := rootCmd.Flags().MarkDeprecated("no-switch-directory", "use --nocd instead"); err != nil {
 		panic(err) //nostyle:dontpanic
 	}
+	rootCmd.Flags().StringVarP(&branchFlag, "branch", "b", "", "Use a different branch name than the worktree directory name")
 	// Config override flags.
 	rootCmd.Flags().StringVar(&basedirFlag, "basedir", "", "Override wt.basedir config (worktree base directory)")
 	rootCmd.Flags().BoolVar(&copyignoredFlag, "copyignored", false, "Override wt.copyignored config (copy .gitignore'd files)")
@@ -237,10 +240,16 @@ func runRoot(cmd *cobra.Command, args []string) error {
 
 	// Handle delete flags (multiple arguments allowed)
 	if forceDeleteFlag {
+		if branchFlag != "" {
+			return fmt.Errorf("cannot use -b/--branch with -D/--force-delete")
+		}
 		args = uniqueArgs(args)
 		return deleteWorktrees(ctx, cmd, args, true)
 	}
 	if deleteFlag {
+		if branchFlag != "" {
+			return fmt.Errorf("cannot use -b/--branch with -d/--delete")
+		}
 		args = uniqueArgs(args)
 		return deleteWorktrees(ctx, cmd, args, false)
 	}
@@ -251,14 +260,19 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("too many arguments: expected <branch> [<start-point>], got %d arguments", len(args))
 	}
 
-	branch := args[0]
+	wtName := args[0]
 	var startPoint string
 	if len(args) == 2 {
 		startPoint = args[1]
 	}
 
+	branchName := branchFlag
+	if branchName == "" {
+		branchName = wtName
+	}
+
 	// Default: create or switch to worktree
-	return handleWorktree(ctx, cmd, branch, startPoint)
+	return handleWorktree(ctx, cmd, wtName, branchName, startPoint)
 }
 
 // loadConfig loads config from git config and applies flag overrides.
@@ -704,7 +718,7 @@ func deleteWorktrees(ctx context.Context, cmd *cobra.Command, branches []string,
 	return nil
 }
 
-func handleWorktree(ctx context.Context, cmd *cobra.Command, branch, startPoint string) error {
+func handleWorktree(ctx context.Context, cmd *cobra.Command, wtName, branchName, startPoint string) error {
 	// Load config with flag overrides
 	cfg, err := loadConfig(ctx, cmd)
 	if err != nil {
@@ -733,9 +747,16 @@ func handleWorktree(ctx context.Context, cmd *cobra.Command, branch, startPoint 
 	}
 
 	// Check if worktree already exists for this branch or directory name
-	wt, err := git.FindWorktreeByBranchOrDir(ctx, branch)
+	wt, err := git.FindWorktreeByBranchOrDir(ctx, branchName)
 	if err != nil {
 		return fmt.Errorf("failed to find worktree: %w", err)
+	}
+	if wt == nil && branchName != wtName {
+		// Also try finding by worktree directory name
+		wt, err = git.FindWorktreeByBranchOrDir(ctx, wtName)
+		if err != nil {
+			return fmt.Errorf("failed to find worktree: %w", err)
+		}
 	}
 
 	if wt != nil {
@@ -745,14 +766,14 @@ func handleWorktree(ctx context.Context, cmd *cobra.Command, branch, startPoint 
 		return nil
 	}
 
-	// Get worktree path
-	wtPath, err := git.WorktreePathFor(ctx, cfg.BaseDir, branch)
+	// Get worktree path using the worktree name (not the branch name)
+	wtPath, err := git.WorktreePathFor(ctx, cfg.BaseDir, wtName)
 	if err != nil {
 		return fmt.Errorf("failed to get worktree path: %w", err)
 	}
 
 	// Check if branch exists
-	exists, err := git.BranchExists(ctx, branch)
+	exists, err := git.BranchExists(ctx, branchName)
 	if err != nil {
 		return fmt.Errorf("failed to check branch: %w", err)
 	}
@@ -760,12 +781,12 @@ func handleWorktree(ctx context.Context, cmd *cobra.Command, branch, startPoint 
 	if exists {
 		// Branch exists, create worktree with existing branch
 		// start-point is ignored when using existing branch
-		if err := git.AddWorktree(ctx, wtPath, branch, copyOpts); err != nil {
+		if err := git.AddWorktree(ctx, wtPath, branchName, copyOpts); err != nil {
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
 	} else {
 		// Branch doesn't exist, create new branch and worktree
-		if err := git.AddWorktreeWithNewBranch(ctx, wtPath, branch, startPoint, copyOpts); err != nil {
+		if err := git.AddWorktreeWithNewBranch(ctx, wtPath, branchName, startPoint, copyOpts); err != nil {
 			return fmt.Errorf("failed to create worktree with new branch: %w", err)
 		}
 	}

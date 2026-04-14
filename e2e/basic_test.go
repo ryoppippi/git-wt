@@ -482,6 +482,125 @@ func TestE2E_CreateWorktree(t *testing.T) {
 			t.Errorf("second worktree path = %q, want %q", wt2Path, expectedWt2Path)
 		}
 	})
+
+	t.Run("branch_flag_new_branch", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-b", "glasser/my-feature", "my-feature")
+		if err != nil {
+			t.Fatalf("git-wt -b failed: %v\nstderr: %s", err, stderr)
+		}
+
+		wtPath := strings.TrimSpace(stdout)
+		// Worktree directory should be named "my-feature", not "glasser/my-feature"
+		expectedPath := filepath.Join(repo.Root, ".wt", "my-feature")
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Fatalf("worktree directory was not created at %s", wtPath)
+		}
+
+		// Verify the branch name is "glasser/my-feature"
+		restore := repo.Chdir()
+		defer restore()
+		cmd := exec.Command("git", "branch", "--list", "glasser/my-feature")
+		branchOut, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("git branch --list failed: %v", err)
+		}
+		if !strings.Contains(string(branchOut), "glasser/my-feature") {
+			t.Errorf("branch glasser/my-feature should exist, got: %s", branchOut)
+		}
+	})
+
+	t.Run("branch_flag_with_start_point", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		repo.CreateFile("main-file.txt", "main content")
+		repo.Commit("main commit")
+
+		repo.Git("branch", "old-base", "HEAD~1")
+
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-b", "glasser/from-old", "from-old", "old-base")
+		if err != nil {
+			t.Fatalf("git-wt -b with start-point failed: %v\nstderr: %s", err, stderr)
+		}
+
+		wtPath := strings.TrimSpace(stdout)
+		expectedPath := filepath.Join(repo.Root, ".wt", "from-old")
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+
+		// Verify the worktree is based on old-base (should NOT have main-file.txt)
+		mainFilePath := filepath.Join(wtPath, "main-file.txt")
+		if _, err := os.Stat(mainFilePath); !os.IsNotExist(err) {
+			t.Error("worktree should NOT have main-file.txt (should be based on old-base)")
+		}
+	})
+
+	t.Run("branch_flag_existing_branch", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create an existing branch
+		repo.Git("branch", "glasser/existing")
+
+		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-b", "glasser/existing", "existing")
+		if err != nil {
+			t.Fatalf("git-wt -b with existing branch failed: %v\nstderr: %s", err, stderr)
+		}
+
+		wtPath := strings.TrimSpace(stdout)
+		expectedPath := filepath.Join(repo.Root, ".wt", "existing")
+		if wtPath != expectedPath {
+			t.Errorf("worktree path = %q, want %q", wtPath, expectedPath)
+		}
+		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
+			t.Fatalf("worktree directory was not created at %s", wtPath)
+		}
+	})
+
+	t.Run("branch_flag_switch_by_branch", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree with -b
+		stdout1, stderr, err := runGitWtStdout(t, binPath, repo.Root, "-b", "glasser/feat", "feat")
+		if err != nil {
+			t.Fatalf("git-wt -b create failed: %v\nstderr: %s", err, stderr)
+		}
+		wtPath := strings.TrimSpace(stdout1)
+
+		// Switch to it by branch name
+		stdout2, stderr, err := runGitWtStdout(t, binPath, repo.Root, "glasser/feat")
+		if err != nil {
+			t.Fatalf("git-wt switch by branch failed: %v\nstderr: %s", err, stderr)
+		}
+		if strings.TrimSpace(stdout2) != wtPath {
+			t.Errorf("switch by branch returned %q, want %q", strings.TrimSpace(stdout2), wtPath)
+		}
+
+		// Switch to it by directory name
+		stdout3, stderr, err := runGitWtStdout(t, binPath, repo.Root, "feat")
+		if err != nil {
+			t.Fatalf("git-wt switch by dir failed: %v\nstderr: %s", err, stderr)
+		}
+		if strings.TrimSpace(stdout3) != wtPath {
+			t.Errorf("switch by dir returned %q, want %q", strings.TrimSpace(stdout3), wtPath)
+		}
+	})
 }
 
 func TestE2E_SwitchWorktree(t *testing.T) {
