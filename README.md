@@ -8,6 +8,7 @@ A Git subcommand that makes `git worktree` simple.
 $ git wt                            # List all worktrees
 $ git wt --json                     # List all worktrees in JSON format
 $ git wt <branch|worktree|path>     # Switch to worktree (create worktree/branch if needed)
+$ git wt -b <branch> <worktree>     # Create worktree with a different branch name
 $ git wt -d <branch|worktree|path>  # Delete worktree and branch (safe)
 $ git wt -D <branch|worktree|path>  # Force delete worktree and branch
 ```
@@ -18,6 +19,19 @@ The target can be specified as:
 - **path**: a filesystem path (absolute or relative to the current working directory) to an existing worktree —  _eg._ `git wt ../sibling`, `git wt /absolute/path`
 
 When deleting, the same target types apply: `git wt -d feature-branch`, `git wt -d .`, `git wt -d ../sibling`
+
+Use `-b`/`--branch` to give the branch a different name from the worktree directory:
+
+``` console
+$ git wt -b user/my-feature my-feature
+```
+
+You can later switch to the worktree by either branch name or directory name:
+
+``` console
+$ git wt user/my-feature  # switch by branch name
+$ git wt my-feature       # switch by directory name
+```
 
 > [!NOTE]
 > The default branch (e.g., main, master) is protected from accidental deletion.
