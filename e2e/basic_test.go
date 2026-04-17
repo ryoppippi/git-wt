@@ -420,7 +420,7 @@ func TestE2E_CreateWorktree(t *testing.T) {
 		}
 	})
 
-	t.Run("start_point_ignored_for_existing_branch", func(t *testing.T) {
+	t.Run("start_point_error_for_existing_branch", func(t *testing.T) {
 		t.Parallel()
 		repo := testutil.NewTestRepo(t)
 		repo.CreateFile("README.md", "# Test")
@@ -428,23 +428,56 @@ func TestE2E_CreateWorktree(t *testing.T) {
 
 		repo.Git("branch", "existing-branch")
 
-		repo.CreateFile("new-file.txt", "new content")
-		repo.Commit("second commit")
-
-		stdout, stderr, err := runGitWtStdout(t, binPath, repo.Root, "existing-branch", "main")
-		if err != nil {
-			t.Fatalf("git-wt failed: %v\nstderr: %s", err, stderr)
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "existing-branch", "main")
+		if err == nil {
+			t.Fatal("expected error when start-point is specified for existing branch, but got none")
 		}
+	})
 
-		wtPath := strings.TrimSpace(stdout)
-		if _, err := os.Stat(wtPath); os.IsNotExist(err) {
-			t.Fatalf("worktree was not created at %s", wtPath)
+	t.Run("start_point_error_for_existing_worktree", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree first
+		runGitWt(t, binPath, repo.Root, "feature-branch")
+
+		// Switching to existing worktree with start-point should error
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "feature-branch", "main")
+		if err == nil {
+			t.Fatal("expected error when start-point is specified for existing worktree, but got none")
 		}
+	})
 
-		// Verify the worktree is based on existing-branch (should NOT have new-file.txt)
-		newFilePath := filepath.Join(wtPath, "new-file.txt")
-		if _, err := os.Stat(newFilePath); !os.IsNotExist(err) {
-			t.Error("worktree should NOT have new-file.txt (start-point should be ignored for existing branch)")
+	t.Run("start_point_error_for_existing_branch_with_b_flag", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		repo.Git("branch", "existing-branch")
+
+		// Creating worktree with -b for existing branch and start-point should error
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "mydir", "-b", "existing-branch", "main")
+		if err == nil {
+			t.Fatal("expected error when start-point is specified with -b for existing branch, but got none")
+		}
+	})
+
+	t.Run("start_point_error_for_existing_worktree_with_b_flag", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Create worktree first
+		runGitWt(t, binPath, repo.Root, "feature-branch")
+
+		// Switching to existing worktree with -b and start-point should error
+		_, _, err := runGitWtStdout(t, binPath, repo.Root, "feature-branch", "-b", "feature-branch", "main")
+		if err == nil {
+			t.Fatal("expected error when start-point is specified with -b for existing worktree, but got none")
 		}
 	})
 
