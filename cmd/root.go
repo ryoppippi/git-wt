@@ -827,6 +827,32 @@ func moveWorktree(ctx context.Context, cmd *cobra.Command, args []string, force 
 		return fmt.Errorf("cannot rename worktree at %q: it has no branch (detached HEAD)", src.Path)
 	}
 
+	// Reject the main working tree explicitly. The 1-arg form already blocks
+	// this via rc.IsLinkedWorktree(), but the 2-arg form can resolve the
+	// main worktree (e.g. `git wt -m . new`, or by passing its path), so
+	// guard at the post-resolve stage too. `git worktree move` refuses the
+	// main worktree as well, but its error is opaque; surfacing the reason
+	// here matches the documented contract that the main working tree
+	// cannot be renamed via this command.
+	mainRoot, err := git.MainRepoRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get main repository root: %w", err)
+	}
+	resolvedMainRoot := mainRoot
+	if resolved, err := filepath.EvalSymlinks(mainRoot); err == nil {
+		resolvedMainRoot = resolved
+	}
+	resolvedSrcPath, err := filepath.Abs(src.Path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve source worktree path: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(resolvedSrcPath); err == nil {
+		resolvedSrcPath = resolved
+	}
+	if resolvedSrcPath == resolvedMainRoot {
+		return fmt.Errorf("cannot rename the main working tree at %q via this command", src.Path)
+	}
+
 	// Protect the default branch unless overridden.
 	isDefault, err := git.IsDefaultBranch(ctx, src.Branch)
 	if err != nil {

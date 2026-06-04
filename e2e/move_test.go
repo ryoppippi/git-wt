@@ -292,6 +292,32 @@ func TestE2E_MoveWorktree(t *testing.T) {
 		}
 	})
 
+	t.Run("two_arg_rejects_main_working_tree", func(t *testing.T) {
+		t.Parallel()
+		repo := testutil.NewTestRepo(t)
+		repo.CreateFile("README.md", "# Test")
+		repo.Commit("initial commit")
+
+		// Two-arg form pointing at the main working tree via "." must be
+		// rejected explicitly, not punted to `git worktree move`.
+		out, err := runGitWt(t, binPath, repo.Root, "-m", ".", "renamed-main")
+		if err == nil {
+			t.Fatalf("renaming the main working tree should fail, got: %s", out)
+		}
+		if !strings.Contains(out, "main working tree") {
+			t.Errorf("error should mention 'main working tree', got: %s", out)
+		}
+
+		// And via its branch name (main).
+		out, err = runGitWt(t, binPath, repo.Root, "-m", "--allow-delete-default", "main", "renamed-main")
+		if err == nil {
+			t.Fatalf("renaming the main working tree by branch should fail, got: %s", out)
+		}
+		if !strings.Contains(out, "main working tree") {
+			t.Errorf("error should mention 'main working tree', got: %s", out)
+		}
+	})
+
 	t.Run("rejects_b_flag", func(t *testing.T) {
 		t.Parallel()
 		repo := testutil.NewTestRepo(t)
