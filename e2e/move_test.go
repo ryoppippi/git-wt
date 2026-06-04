@@ -552,6 +552,195 @@ func TestE2E_MoveCurrentWorktree(t *testing.T) {
 		}
 	})
 
+	t.Run("nocd_create_still_cds_on_rename", func(t *testing.T) {
+		// Reproduces the maintainer's spec from issue #184: when
+		// `wt.nocd=create` is set, rename targets an existing worktree at a
+		// new location (not a fresh creation), so the shell wrapper must
+		// still cd to the new path.
+		tests := []struct {
+			name       string
+			shell      string
+			scriptFunc func(repoRoot, wtPath, pathDir, newName string) string
+		}{
+			{
+				name:  "bash",
+				shell: "bash",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init bash)"
+cd %q
+git wt -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+			{
+				name:  "zsh",
+				shell: "zsh",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init zsh)"
+cd %q
+git wt -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+			{
+				name:  "fish",
+				shell: "fish",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -x PATH %s $PATH
+git wt --init fish | source
+cd %q
+git wt -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				if _, err := exec.LookPath(tt.shell); err != nil {
+					t.Skipf("%s not available", tt.shell)
+				}
+
+				repo := testutil.NewTestRepo(t)
+				repo.CreateFile("README.md", "# Test")
+				repo.Commit("initial commit")
+				repo.Git("config", "wt.nocd", "create")
+
+				oldName := fmt.Sprintf("nocdcr-%s-old", tt.shell)
+				newName := fmt.Sprintf("nocdcr-%s-new", tt.shell)
+
+				out, err := runGitWt(t, binPath, repo.Root, oldName)
+				if err != nil {
+					t.Fatalf("failed to create worktree: %v", err)
+				}
+				oldPath := worktreePath(out)
+				expectedNew := filepath.Join(filepath.Dir(oldPath), newName)
+
+				script := tt.scriptFunc(repo.Root, oldPath, filepath.Dir(binPath), newName)
+				cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
+				cmdOut, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("%s shell integration failed: %v\noutput: %s", tt.shell, err, cmdOut)
+				}
+
+				output := strings.TrimSpace(string(cmdOut))
+				lines := strings.Split(output, "\n")
+				pwd := lines[len(lines)-1]
+
+				resolvedExpected, errExp := filepath.EvalSymlinks(expectedNew)
+				resolvedPwd, errPwd := filepath.EvalSymlinks(pwd)
+				if pwd != expectedNew && (errExp != nil || errPwd != nil || resolvedExpected != resolvedPwd) {
+					t.Errorf("wt.nocd=create should still cd on rename, expected pwd=%q, got %q\nfull output: %s", expectedNew, pwd, output)
+				}
+			})
+		}
+	})
+
+	t.Run("nocd_flag_suppresses_cd_on_rename", func(t *testing.T) {
+		// The maintainer's spec also says `--nocd` always suppresses the
+		// cd, even when combined with `-m`. Verify the wrapper's precedence:
+		// --nocd (nocd_flag) is checked before rename_flag.
+		tests := []struct {
+			name       string
+			shell      string
+			scriptFunc func(repoRoot, wtPath, pathDir, newName string) string
+		}{
+			{
+				name:  "bash",
+				shell: "bash",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init bash)"
+cd %q
+git wt --nocd -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+			{
+				name:  "zsh",
+				shell: "zsh",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -e
+export PATH="%s:$PATH"
+eval "$(git wt --init zsh)"
+cd %q
+git wt --nocd -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+			{
+				name:  "fish",
+				shell: "fish",
+				scriptFunc: func(repoRoot, wtPath, pathDir, newName string) string {
+					return fmt.Sprintf(`
+set -x PATH %s $PATH
+git wt --init fish | source
+cd %q
+git wt --nocd -m %s
+pwd
+`, pathDir, wtPath, newName)
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				if _, err := exec.LookPath(tt.shell); err != nil {
+					t.Skipf("%s not available", tt.shell)
+				}
+
+				repo := testutil.NewTestRepo(t)
+				repo.CreateFile("README.md", "# Test")
+				repo.Commit("initial commit")
+
+				oldName := fmt.Sprintf("nocdflag-%s-old", tt.shell)
+				newName := fmt.Sprintf("nocdflag-%s-new", tt.shell)
+
+				out, err := runGitWt(t, binPath, repo.Root, oldName)
+				if err != nil {
+					t.Fatalf("failed to create worktree: %v", err)
+				}
+				oldPath := worktreePath(out)
+				expectedNew := filepath.Join(filepath.Dir(oldPath), newName)
+
+				script := tt.scriptFunc(repo.Root, oldPath, filepath.Dir(binPath), newName)
+				cmd := exec.Command(tt.shell, "-c", script) //#nosec G204
+				cmdOut, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("%s shell integration failed: %v\noutput: %s", tt.shell, err, cmdOut)
+				}
+
+				output := strings.TrimSpace(string(cmdOut))
+				lines := strings.Split(output, "\n")
+				pwd := lines[len(lines)-1]
+
+				// pwd must NOT have changed to the new path.
+				resolvedExpected, errExp := filepath.EvalSymlinks(expectedNew)
+				resolvedPwd, errPwd := filepath.EvalSymlinks(pwd)
+				if pwd == expectedNew || (errExp == nil && errPwd == nil && resolvedExpected == resolvedPwd) {
+					t.Errorf("--nocd should suppress cd on rename, but pwd changed to %q\nfull output: %s", pwd, output)
+				}
+			})
+		}
+	})
+
 	t.Run("shell_integration_cd_to_new_path", func(t *testing.T) {
 		t.Parallel()
 		tests := []struct {
