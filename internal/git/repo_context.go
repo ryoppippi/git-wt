@@ -92,6 +92,12 @@ func DetectRepoContext(ctx context.Context) (RepoContext, error) {
 	return rc, nil
 }
 
+// IsLinkedWorktree reports whether the current directory is a linked worktree
+// (i.e., not the main working tree and not a bare-repo root).
+func (rc *RepoContext) IsLinkedWorktree() bool {
+	return rc.worktree
+}
+
 // IsBareRepository reports whether the main repository is bare.
 // It is a convenience wrapper around DetectRepoContext.
 func IsBareRepository(ctx context.Context) (bool, error) {

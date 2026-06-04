@@ -14,6 +14,7 @@ git() {
         shift
         local nocd_mode=""
         local nocd_flag=false
+        local rename_flag=false
         # Check wt.nocd config (supports: true, all, create, false)
         nocd_mode="$(command git config --get wt.nocd 2>/dev/null || true)"
         local existing_worktrees=""
@@ -25,6 +26,9 @@ git() {
         for arg in "$@"; do
             if [[ "$arg" == "--nocd" || "$arg" == "--no-switch-directory" ]]; then
                 nocd_flag=true
+            fi
+            if [[ "$arg" == "-m" || "$arg" == "-M" || "$arg" == "--move" || "$arg" == "--force-move" ]]; then
+                rename_flag=true
             fi
             args+=("$arg")
         done
@@ -49,7 +53,9 @@ git() {
                 should_cd=false
             elif [[ "$nocd_mode" == "create" ]]; then
                 # wt.nocd=create only prevents cd for new worktrees
-                if echo "$existing_worktrees" | grep -qxF "$last_line"; then
+                if [[ "$rename_flag" == "true" ]]; then
+                    should_cd=true  # rename targets existing worktree at new path
+                elif echo "$existing_worktrees" | grep -qxF "$last_line"; then
                     should_cd=true  # existing worktree, allow cd
                 else
                     should_cd=false  # new worktree, prevent cd
@@ -94,6 +100,7 @@ git() {
         shift
         local nocd_mode=""
         local nocd_flag=false
+        local rename_flag=false
         # Check wt.nocd config (supports: true, all, create, false)
         nocd_mode="$(command git config --get wt.nocd 2>/dev/null || true)"
         local existing_worktrees=""
@@ -105,6 +112,9 @@ git() {
         for arg in "$@"; do
             if [[ "$arg" == "--nocd" || "$arg" == "--no-switch-directory" ]]; then
                 nocd_flag=true
+            fi
+            if [[ "$arg" == "-m" || "$arg" == "-M" || "$arg" == "--move" || "$arg" == "--force-move" ]]; then
+                rename_flag=true
             fi
             args+=("$arg")
         done
@@ -129,7 +139,9 @@ git() {
                 should_cd=false
             elif [[ "$nocd_mode" == "create" ]]; then
                 # wt.nocd=create only prevents cd for new worktrees
-                if echo "$existing_worktrees" | grep -qxF "$last_line"; then
+                if [[ "$rename_flag" == "true" ]]; then
+                    should_cd=true  # rename targets existing worktree at new path
+                elif echo "$existing_worktrees" | grep -qxF "$last_line"; then
                     should_cd=true  # existing worktree, allow cd
                 else
                     should_cd=false  # new worktree, prevent cd
@@ -193,6 +205,7 @@ const fishGitWrapper = `
 function git --wraps git
     if test "$argv[1]" = "wt"
         set -l nocd_flag false
+        set -l rename_flag false
         # Check wt.nocd config (supports: true, all, create, false)
         set -l nocd_mode (command git config --get wt.nocd 2>/dev/null)
         set -l existing_worktrees
@@ -203,7 +216,9 @@ function git --wraps git
         for arg in $argv[2..]
             if string match -q -- "--nocd" "$arg"; or string match -q -- "--no-switch-directory" "$arg"
                 set nocd_flag true
-                break
+            end
+            if string match -q -- "-m" "$arg"; or string match -q -- "-M" "$arg"; or string match -q -- "--move" "$arg"; or string match -q -- "--force-move" "$arg"
+                set rename_flag true
             end
         end
         set -lx GIT_WT_SHELL_INTEGRATION 1
@@ -226,7 +241,9 @@ function git --wraps git
                 set should_cd false
             else if test "$nocd_mode" = "create"
                 # wt.nocd=create only prevents cd for new worktrees
-                if contains -- "$last_line" $existing_worktrees
+                if test "$rename_flag" = "true"
+                    set should_cd true  # rename targets existing worktree at new path
+                else if contains -- "$last_line" $existing_worktrees
                     set should_cd true  # existing worktree, allow cd
                 else
                     set should_cd false  # new worktree, prevent cd
@@ -287,6 +304,7 @@ const powershellGitWrapper = "" +
 	"    if ($args[0] -eq \"wt\") {\n" +
 	"        $wtArgs = $args[1..($args.Length-1)]\n" +
 	"        $nocdFlag = ($wtArgs -contains \"--nocd\") -or ($wtArgs -contains \"--no-switch-directory\")\n" +
+	"        $renameFlag = ($wtArgs -contains \"-m\") -or ($wtArgs -contains \"-M\") -or ($wtArgs -contains \"--move\") -or ($wtArgs -contains \"--force-move\")\n" +
 	"        # Check wt.nocd config (supports: true, all, create, false)\n" +
 	"        $nocdMode = & git.exe config --get wt.nocd 2>$null\n" +
 	"        $existingWorktrees = @()\n" +
@@ -315,7 +333,9 @@ const powershellGitWrapper = "" +
 	"                $shouldCd = $false\n" +
 	"            } elseif ($nocdMode -eq \"create\") {\n" +
 	"                # wt.nocd=create only prevents cd for new worktrees\n" +
-	"                if ($existingWorktrees -contains $lastLine) {\n" +
+	"                if ($renameFlag) {\n" +
+	"                    $shouldCd = $true  # rename targets existing worktree at new path\n" +
+	"                } elseif ($existingWorktrees -contains $lastLine) {\n" +
 	"                    $shouldCd = $true  # existing worktree, allow cd\n" +
 	"                } else {\n" +
 	"                    $shouldCd = $false  # new worktree, prevent cd\n" +

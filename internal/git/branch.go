@@ -82,6 +82,52 @@ func DeleteBranchInDir(ctx context.Context, name string, force bool, dir string)
 	return cmd.Run()
 }
 
+// CheckBranchNameFormat validates that name is a syntactically valid Git
+// branch name (e.g., rejects "foo..bar", names ending with ".lock", etc.),
+// using `git check-ref-format refs/heads/<name>`. It does not check whether
+// the branch already exists.
+func CheckBranchNameFormat(ctx context.Context, name string) error {
+	cmd, err := gitCommand(ctx, "check-ref-format", "refs/heads/"+name)
+	if err != nil {
+		return err
+	}
+	// Forward stderr so any explanation git emits about the malformed ref
+	// surfaces to the user, matching the style of the other git helpers in
+	// this package.
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("invalid branch name %q: %w", name, err)
+	}
+	return nil
+}
+
+// RenameBranch renames a branch from oldName to newName.
+// If force is true, it uses -M (force rename, allows overwriting an existing
+// target branch), otherwise -m (safe rename). When dir is non-empty the
+// command is run with 'git -C <dir>', which is required when the calling
+// process's working directory has just been removed (e.g., after moving the
+// current worktree).
+func RenameBranch(ctx context.Context, oldName, newName string, force bool, dir string) error {
+	flag := "-m"
+	if force {
+		flag = "-M"
+	}
+	var args []string
+	if dir != "" {
+		args = append(args, "-C", dir)
+	}
+	// Pass branch names after `--` so that names beginning with `-`
+	// (e.g. `-q`) are not parsed as options by `git branch`.
+	args = append(args, "branch", flag, "--", oldName, newName)
+	cmd, err := gitCommand(ctx, args...)
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // IsBranchMerged checks if a branch is merged into the current branch.
 func IsBranchMerged(ctx context.Context, name string) (bool, error) {
 	cmd, err := gitCommand(ctx, "branch", "--merged")

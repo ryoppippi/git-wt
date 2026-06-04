@@ -378,19 +378,15 @@ func AddWorktreeWithNewBranch(ctx context.Context, path, branch, startPoint stri
 	return copyAfterAdd(ctx, ac, path, copyOpts)
 }
 
-// initBaseDir initializes the basedir with .gitignore and README.md files.
-// It creates these files only if they don't already exist.
-func initBaseDir(baseDir string) error {
-	gitignorePath := filepath.Join(baseDir, ".gitignore")
-	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
-		if err := os.WriteFile(gitignorePath, []byte("*\n"), 0600); err != nil {
-			return fmt.Errorf("failed to create .gitignore: %w", err)
-		}
-	}
+// baseDirGitignoreContent is the exact content initBaseDir plants into a
+// fresh basedir's .gitignore. It is also used by RemoveEmptyParents to
+// recognize an untouched decoration file when cleaning up.
+const baseDirGitignoreContent = "*\n"
 
-	readmePath := filepath.Join(baseDir, "README.md")
-	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-		readmeContent := `# Git worktrees added by ` + "`git wt`" + `
+// baseDirReadmeContent is the exact content initBaseDir plants into a fresh
+// basedir's README.md. It is also used by RemoveEmptyParents to recognize an
+// untouched decoration file when cleaning up.
+const baseDirReadmeContent = `# Git worktrees added by ` + "`git wt`" + `
 
 This directory contains Git worktrees created with ` + "`git wt`" + `.
 
@@ -400,7 +396,20 @@ This directory contains Git worktrees created with ` + "`git wt`" + `.
 - Depending on your configuration, this directory may be placed under a Git repository.
   A ` + "`.gitignore`" + ` file ensures everything under it is ignored in that case.
 `
-		if err := os.WriteFile(readmePath, []byte(readmeContent), 0600); err != nil {
+
+// initBaseDir initializes the basedir with .gitignore and README.md files.
+// It creates these files only if they don't already exist.
+func initBaseDir(baseDir string) error {
+	gitignorePath := filepath.Join(baseDir, ".gitignore")
+	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+		if err := os.WriteFile(gitignorePath, []byte(baseDirGitignoreContent), 0600); err != nil {
+			return fmt.Errorf("failed to create .gitignore: %w", err)
+		}
+	}
+
+	readmePath := filepath.Join(baseDir, "README.md")
+	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
+		if err := os.WriteFile(readmePath, []byte(baseDirReadmeContent), 0600); err != nil {
 			return fmt.Errorf("failed to create README.md: %w", err)
 		}
 	}
@@ -447,4 +456,148 @@ func RemoveWorktree(ctx context.Context, path string, force bool) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// MoveWorktree moves a worktree directory from oldPath to newPath using
+// 'git worktree move'. The parent directory of newPath is created if needed.
+// If force is true, '--force' is passed to allow moving worktrees with
+// uncommitted or untracked changes.
+func MoveWorktree(ctx context.Context, oldPath, newPath string, force bool) error {
+	parentDir := filepath.Dir(newPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory: %w", err)
+	}
+	if err := initBaseDir(parentDir); err != nil {
+		return err
+	}
+
+	args := []string{"worktree", "move"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, oldPath, newPath)
+
+	cmd, err := gitCommand(ctx, args...)
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// RemoveEmptyParents walks up from startDir removing empty directories until
+// it reaches stopDir (exclusive) or hits a non-empty directory. stopDir is
+// never removed.
+//
+// Both paths must be absolute; the function returns an error otherwise so a
+// caller that hands in a relative path cannot accidentally trigger deletions
+// against its current working directory. As a further safety guard, startDir
+// must itself be a strict descendant of stopDir; otherwise the walk refuses
+// to remove anything (returning nil) so a misconfigured basedir cannot cause
+// the loop to climb out of basedir and delete unrelated directories.
+//
+// Directories that contain only the basedir decoration files written by
+// initBaseDir (.gitignore, README.md) are treated as empty for cleanup
+// purposes, because slash-style branch names (e.g. "feat/foo") cause those
+// files to be planted in every intermediate directory under basedir.
+// To avoid clobbering user-edited files, the decoration files are only
+// considered removable when their content is bit-identical to what
+// initBaseDir wrote.
+func RemoveEmptyParents(startDir, stopDir string) error {
+	if !filepath.IsAbs(startDir) || !filepath.IsAbs(stopDir) {
+		return fmt.Errorf("absolute paths required: startDir=%q stopDir=%q", startDir, stopDir)
+	}
+	stopDir = filepath.Clean(stopDir)
+	cur := filepath.Clean(startDir)
+	if !isStrictDescendant(cur, stopDir) {
+		return nil
+	}
+	for cur != stopDir {
+		entries, err := os.ReadDir(cur)
+		if err != nil {
+			if os.IsNotExist(err) {
+				cur = filepath.Dir(cur)
+				if !isStrictDescendant(cur, stopDir) && cur != stopDir {
+					return nil
+				}
+				continue
+			}
+			return err
+		}
+		removable, err := onlyUntouchedDecorationFiles(cur, entries)
+		if err != nil {
+			return err
+		}
+		if !removable {
+			return nil
+		}
+		if err := os.RemoveAll(cur); err != nil {
+			return err
+		}
+		cur = filepath.Dir(cur)
+		if !isStrictDescendant(cur, stopDir) && cur != stopDir {
+			return nil
+		}
+	}
+	return nil
+}
+
+// isStrictDescendant reports whether path lies strictly below root.
+// Both inputs must already be absolute and filepath.Clean'd.
+func isStrictDescendant(path, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	if rel == "." || rel == "" {
+		return false
+	}
+	// Reject only genuine parent traversals: the rel must be exactly ".."
+	// or start with "../" (i.e. ".." followed by the path separator).
+	// A bare strings.HasPrefix(rel, "..") would also reject legitimate
+	// child names that happen to start with two dots (e.g. "..cache").
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
+// onlyUntouchedDecorationFiles reports whether the entries of dir consist
+// solely of .gitignore and/or README.md files whose content matches what
+// initBaseDir wrote. Empty directories are also considered "removable" by
+// returning true with an empty entries slice. Any subdirectory, any other
+// filename, or a decoration file whose content has been edited makes the
+// directory non-removable.
+func onlyUntouchedDecorationFiles(dir string, entries []os.DirEntry) (bool, error) {
+	for _, e := range entries {
+		if e.IsDir() {
+			return false, nil
+		}
+		// Symlinks report IsDir()==false even when they point at a directory.
+		// Conservatively refuse to remove a directory containing any symlink:
+		// a symlink named .gitignore/README.md whose target happens to match
+		// the expected content would otherwise be considered removable, and
+		// os.RemoveAll would follow the symlink semantics unpredictably.
+		if e.Type()&os.ModeSymlink != 0 {
+			return false, nil
+		}
+		var want string
+		switch e.Name() {
+		case ".gitignore":
+			want = baseDirGitignoreContent
+		case "README.md":
+			want = baseDirReadmeContent
+		default:
+			return false, nil
+		}
+		got, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return false, err
+		}
+		if string(got) != want {
+			return false, nil
+		}
+	}
+	return true, nil
 }

@@ -11,6 +11,8 @@ $ git wt <branch|worktree|path>     # Switch to worktree (create worktree/branch
 $ git wt -b <branch> <worktree>     # Create worktree with a different branch name
 $ git wt -d <branch|worktree|path>  # Delete worktree and branch (safe)
 $ git wt -D <branch|worktree|path>  # Force delete worktree and branch
+$ git wt -m [<old>] <new>           # Rename worktree directory and branch (safe)
+$ git wt -M [<old>] <new>           # Force rename (overwrite existing branch, allow moving dirty/locked worktrees)
 ```
 
 The target can be specified as:
@@ -19,6 +21,15 @@ The target can be specified as:
 - **path**: a filesystem path (absolute or relative to the current working directory) to an existing worktree —  _eg._ `git wt ../sibling`, `git wt /absolute/path`
 
 When deleting, the same target types apply: `git wt -d feature-branch`, `git wt -d .`, `git wt -d ../sibling`
+
+Use `-m` (`-M` to force) to rename a worktree's directory and branch in a single operation. With one argument, the current worktree is renamed; with two, an explicit worktree is renamed:
+
+``` console
+$ git wt -m new-name                 # rename the current worktree to "new-name"
+$ git wt -m old-name new-name        # rename worktree "old-name" to "new-name"
+```
+
+When invoked through the shell integration on the current worktree, the shell wrapper `cd`s to the new path (the same way `-d` returns to the main repository root after deleting the current worktree).
 
 Use `-b`/`--branch` to give the branch a different name from the worktree directory:
 
@@ -34,10 +45,10 @@ $ git wt my-feature       # switch by directory name
 ```
 
 > [!NOTE]
-> The default branch (e.g., main, master) is protected from accidental deletion.
-> - If the default branch has a worktree, the worktree is deleted but the branch is preserved.
-> - If the default branch has no worktree, deletion is blocked entirely.
-> - Use `--allow-delete-default` to override this protection and delete the branch.
+> The default branch (e.g., main, master) is protected from accidental deletion or rename. Pass `--allow-delete-default` to override the protection.
+> - If the default branch has a worktree, `-d` removes the worktree but keeps the branch by default; `-m`/`-M` refuses to rename it by default.
+> - If the default branch has no worktree, deletion is refused by default.
+> - In every case, `--allow-delete-default` lifts the protection and lets the destructive operation proceed against the default branch.
 
 ## Install
 
