@@ -26,6 +26,6 @@ require (
 	github.com/olekukonko/errors v1.2.0 // indirect
 	github.com/olekukonko/ll v0.1.6 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
